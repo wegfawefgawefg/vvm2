@@ -104,3 +104,25 @@ Nothing below has been shown beyond that.
     separately, on compute; and the row with no bank at all (input write and readout only).
 35. **Scale**: a byte-level language model with a bank of tens of gigabytes on NVMe against
     the best dense model that fits the GPU.
+
+## Added 2026-11-26, after the first measurements
+
+36. **Registers that fit the hardware** (owner asked; a proposal, not built): the state as a
+    few registers of 16 numbers each, which is one 512-bit vector register or one 64-byte
+    cache line. A vop names two registers to read and one to write, as a real instruction
+    does, and is a 16 by 32 matrix: small enough to stay in the first-level cache and to
+    run as a handful of vector instructions. Registers a vop does not name are untouched,
+    so "do nothing to the rest" is free, and vops that touch different registers can run
+    at the same time.
+37. **The size of a vop as a dial**: a rank-n vop reads n numbers from the state and writes
+    them back along n directions. Rank 1 is a single neuron; full rank is a whole layer.
+    Small vops and a big bank, or big vops and a small one, at the same compute: which is
+    better, and does it depend on the task. (On MNIST a full vop needs no bank; rank-2 vops
+    gain from one.)
+38. **A vvm with rank-1 vops is a layer of neurons of which only the best-matching few are
+    run.** An ordinary layer runs all of them. Worth stating as the plain-words link to
+    ordinary nets.
+39. **Why use is a plateau and a cliff, not Zipf** (`scripts/use.sh`): the vops in use have
+    similar shares and the rest are dead. Does a varied, larger task give a long tail, and
+    do noise or re-seeding bring dead vops in.
+

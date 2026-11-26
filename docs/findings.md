@@ -38,4 +38,12 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
    or curve (`docs/img/vops-small-trained.png` against `vops-small.png`). Weight decay
    alone lifts the test score to 0.963 (train 0.988); with the shifts it is 0.956 on both,
    so that vvm is then short of capacity, not overfitted.
+9. **Use is a plateau and a cliff, not Zipf.** [hint: one seed each, `scripts/use.sh`] From
+   the busiest down, the vops in use have similar shares (9% falling to about 2%) and then
+   use drops to nothing: 33 of 64 in use, 55 of 256, 76 of 1,024. A bigger bank brings a
+   few more vops in but most of it is never fetched. With 16 full vops and 3 ticks the
+   busiest takes 23% of all fetches and 9 carry nearly everything.
+10. **Shifted training digits, not weight decay, are what make a vop's reads smooth.**
+    [hint: one seed] Weight decay alone leaves them speckled (`docs/img/vops-small-wd.png`);
+    with shifts they are clean strokes (`vops-small-trained.png`).
 
