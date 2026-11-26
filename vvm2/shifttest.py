@@ -37,7 +37,37 @@ def moved(x, g, zero_ok=True):
     return img[torch.arange(n).view(n, 1, 1), rows, cols].reshape(n, 784)
 
 
+def pointers(task):
+    """The same test for the machine that can step its pointers: vops see the pc and the
+    address slots (see_head), with random or structured addresses, soft or sharp pointers."""
+    torch.set_num_threads(8)
+    data = TASKS[task](0)
+    x, y = data[2], data[3]
+    g = torch.Generator().manual_seed(123)
+    x_moved = moved(x, g, zero_ok=False)
+    x_mixed = moved(x, g, zero_ok=True)
+    print("%s, version 6 with vops that see their own pointers. Test accuracy." % task)
+    print("| addresses | pointers | a: trained in place, in place | a: moved | b: trained "
+          "moved, in place | b: moved or not |", flush=True)
+    print("|---|---|---|---|---|---|", flush=True)
+    for addresses, top in (("random", 0), ("grid", 0), ("grid", 3), ("grid", 1)):
+        runs = []
+        for augment in (None, moved):
+            torch.manual_seed(0)
+            m = Core(ticks=8, addresses=addresses, top=top, see_head=True)
+            train(m, data, 6000, 128, 3e-3, 0, wd=0.05, augment=augment)
+            runs.append(m)
+        a, b = runs
+        print("| %s | %s | %.3f | %.3f | %.3f | %.3f |" % (
+            "structured" if addresses == "grid" else "random",
+            "soft" if top == 0 else "nearest %d" % top,
+            score(a, x, y, "class"), score(a, x_moved, y, "class"),
+            score(b, x, y, "class"), score(b, x_mixed, y, "class")), flush=True)
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "pointers":
+        return pointers(sys.argv[2] if len(sys.argv) > 2 else "mnist")
     task = sys.argv[1] if len(sys.argv) > 1 else "mnist"
     torch.set_num_threads(8)
     data = TASKS[task](0)

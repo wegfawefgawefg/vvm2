@@ -157,7 +157,8 @@ def shifted(x, most, g):
     return img[torch.arange(n).view(n, 1, 1), rows, cols].reshape(n, 784)
 
 
-def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0, augment=None):
+def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0, augment=None, loss_fn=None,
+          each_step=None):
     """wd: weight decay (AdamW). shift: MNIST only, move each training image by up to this
     many pixels at random (the usual augmentation)."""
     x, y, tx, ty, kind = data
@@ -166,14 +167,19 @@ def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0, augment=None):
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps)
     g = torch.Generator().manual_seed(seed)
     start = time.time()
-    for _ in range(steps):
+    for step in range(steps):
         model.train()
+        if each_step is not None:
+            each_step(model, step / steps)   # for schedules: the share of training done
         i = torch.randint(len(x), (min(batch, len(x)),), generator=g)
         xb = shifted(x[i], shift, g) if shift else x[i]
         if augment is not None:
             xb = augment(xb, g)
-        out = model(xb)
-        loss = F.cross_entropy(out, y[i]) if kind == "class" else F.mse_loss(out, y[i])
+        if loss_fn is not None:
+            loss = loss_fn(model, xb, y[i])
+        else:
+            out = model(xb)
+            loss = F.cross_entropy(out, y[i]) if kind == "class" else F.mse_loss(out, y[i])
         opt.zero_grad()
         loss.backward()
         opt.step()

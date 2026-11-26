@@ -154,3 +154,44 @@ Nothing below has been shown beyond that.
     learn not to trample itself when the RAM is big enough, or must program and data be
     kept apart. Needs each run to have its own copy of the part it can write.
 
+## Added 2026-11-26, while designing version 6 (`vvm2/core.py`)
+
+46. **One memory, with the pc and the addresses as ordinary slots** (owner: memory and state
+    should not be separate things). *Built: version 6.*
+47. **One write rule everywhere** (owner: an op should just write, and a quiet op writes
+    quietly): a slot moves toward what is written by its loudness. *Built.*
+48. **A vop sets the next pc and the next addresses as well as its store** (the "wide" vop):
+    faster per unit of work on this CPU (`scripts/benchtick.sh`). *Built.*
+49. **Several reads a tick.** *Built as a switch; four reads lift MNIST from 0.939 to 0.970.*
+50. **A vop sees its own pointers,** so it can step them ("one to the right of where I am").
+    Without it pointer arithmetic is impossible. *Built as a switch (`see_head`); being
+    tested.*
+51. **Addresses shaped like the device** (owner: addressing may need to follow the shape of
+    the input): an address is [region | position], and each device lays out its own slots:
+    row and column for an image, time for audio. *Built for images as a switch; alone it
+    scored worse; being tested with sharp pointers and vops that see their pointers.*
+52. **Learned addresses,** as the less biased alternative to 51: every slot's address starts
+    random and is trained.
+53. **Adding a device is giving it an unused region code.** Fixed-width addresses, the space
+    divided from the start, as a real memory map is. No existing address moves.
+54. **The world announces a new device in a known slot** (an interrupt and a device table);
+    the program learns what to do about it.
+55. **A driver is fixed and dumb** (owner: shims would eat compute and take the work away
+    from the vvm): it only lays a device's numbers out as slots. It may have control slots
+    the vvm writes, such as where to look and how far to zoom, and data slots the device
+    fills with a small fixed window resampled smoothly, so the gradient can say "look a
+    little left". Position and scale then come from the vvm's own action.
+56. **Exploration without a clock** (owner: a timed curriculum is against learning without
+    end): the amount of noise comes from the machine's own state, more where it is unsure
+    or where nothing matches or a slot is unfamiliar, less where it is confident.
+57. **Curiosity** (owner: "pull an icm in"; it is in the original vvm notes): a vop guesses
+    what its next load will return; the surprise draws exploration and is a training signal
+    with no labels. Guard against staring at pure noise: value surprise that is shrinking.
+58. **A curriculum of data, not of settings** (owner): the machine's rules stay fixed for
+    life; the world shows it easy things first.
+59. **Fetch by a bar with a cap, and grow a vop when nothing matches** (owner: "nothing
+    matches" should expand the mind, not stop it).
+60. **Guard against sprawl:** every new idea must be a switch on the one core, a device
+    outside the machine, or a training signal. Nothing new goes inside the tick unless it
+    replaces something there.
+
