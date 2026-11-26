@@ -17,6 +17,15 @@ parameter count, once on compute per step. Both numbers are in every table.
 0d. Pointer chasing: follow a learned map k times, one hop a tick. What it shows: the walk.
 0e. Bank collapse against the remedies in `docs/design.md`, cheapest first (noise in the
     pick, in the query, in the state; then normalisation; then re-seeding).
+    Noise here means literal noise added to the vectors while the machine runs (the
+    owner: "brains are full of noise"), at a strength that can be set for each place: the
+    state, the query (the address), a value as it is read, a value as it is written, and
+    which entries are picked. Measure for each, beyond collapse: does a learned walk
+    survive it (is each entry good for a neighbourhood of states, not one point), does it
+    generalise better, and how coarse can stored values be made afterwards (a bank trained
+    under value noise should survive few-bit storage, which is more entries per gigabyte).
+    Later: a noise strength learned per entry, as a reading of how many bits that entry
+    needs and how much it matters when the bank is shrunk.
 0f. Delayed copy and n-back, with and without the data memory. What it shows: the state's
     bandwidth and whether the run-time store removes the limit.
 0g. Kuzushiji-MNIST, then a character-level language model on a small text.
