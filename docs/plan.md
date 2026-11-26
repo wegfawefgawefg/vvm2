@@ -90,7 +90,17 @@ dense model that fits the GPU.
 
 ## Todo, not scheduled
 
-Nothing here yet. (Credit past the backprop window moved up to 0i; its references:
+- **Op registers** (the owner's idea, an efficiency metaphor, not a requirement): a few slots
+  that hold fetched vops, as a CPU's registers hold operands, so a vop that is used tick
+  after tick is not fetched again. It matters once the bank is on disk: a walk that stays
+  on the loaded vops costs no reads. First measure how often a walk reuses a vop it
+  fetched in the last few ticks; build it only if that is high. Unknown whether it helps.
+- The walks form a tree on MNIST (`scripts/tree.sh`): few vops on the first tick, more
+  paths each tick, different digits parting ways later. A tree is what makes disk-backed
+  fetch cheap (the trunk stays cached). To measure once banks are larger: depth, branching,
+  and how much of a walk is trunk.
+
+(Credit past the backprop window moved up to 0i; its references:
 sparse attentive backtracking, Ke et al. 2018; temporal value transport, Hung et al. 2019;
 eligibility traces and e-prop; SnAp, Menick et al. 2020; synthetic gradients, Jaderberg et
 al. 2016.)
