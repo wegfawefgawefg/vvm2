@@ -1,4 +1,29 @@
 # Findings
 
 What has been measured, with the evidence. Grades: **solid** (two or more independent
-results), **likely** (one clean result), **hint** (few seeds or one setting). Nothing yet.
+results), **likely** (one clean result), **hint** (few seeds or one setting). All MNIST
+numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist ...`.
+
+1. **The core learns the ordinary tasks.** [likely] A state, a bank of matrix vops fetched by
+   key and applied to the state: xor, a sine curve, two spirals and MNIST, level with an
+   MLP of the same compute (MNIST 0.978 against 0.978).
+2. **With full-size vops, MNIST does not need the bank or the ticks.** [likely] One 64x64
+   vop applied once: 0.976. Sixteen vops, two fetched: 0.979 at one tick, 0.979 at two,
+   0.978 at three, 0.974 at six. So a tree of walks forms (`scripts/tree.sh`,
+   `scripts/look.sh`), but the accuracy would be there without it: one vop applied each
+   tick is a small recurrent net.
+3. **An early leader becomes the trunk.** [likely: 3 seeds] The vop that is the best match
+   for the most digits early in training (21% to 35% at the start) grows to 64% to 82% of
+   first-tick picks. In one seed of three it is the very vop that led before any training.
+4. **With small vops and compute held fixed, a bigger bank scores better.** [likely] Rank-2
+   vops, two fetched, one tick (`--rank 2 --ticks 1`): a bank of 2 scores 0.918, of 16
+   0.949, of 64 0.956, of 256 0.955, of 1,024 0.956, at the same compute per digit. This is
+   the first sign of the idea itself: weights that sit unread cost nothing and still help.
+   It levels off at about 64 vops, of which half are used; no trunk forms (the busiest vop
+   is fetched for a fifth of digits). Each vop is readable: fetched for one or two digits,
+   pushing the answer toward them (`scripts/lookvops.sh`).
+5. **More ticks do not help yet, and with small vops they hurt.** [hint] Rank-2 vops, 256 in
+   the bank: 0.955 at one tick, 0.915 at three. Nothing tells the vvm when to stop.
+6. **A digit mostly takes one path, and the other paths are other handwriting.** [hint: one
+   trained vvm] Share of a digit's examples on its commonest path: 91% for 0, 26% for 7;
+   upright and slanted ones take different paths (`docs/img/digits-mnist.png`).
