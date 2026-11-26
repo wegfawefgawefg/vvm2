@@ -20,6 +20,15 @@ parameter count, once on compute per step. Both numbers are in every table.
 0f. Delayed copy and n-back, with and without the data memory. What it shows: the state's
     bandwidth and whether the run-time store removes the limit.
 0g. Kuzushiji-MNIST, then a character-level language model on a small text.
+0h. Does it learn to learn. The owner's hope for making program memory and data memory one
+    store: an entry the machine writes while running is found and applied exactly as a
+    learned entry is, so the machine can add an operation to itself from one example.
+    Test: every episode has a fresh random map; the machine is shown some of its pairs,
+    then asked about them. Nothing learned in advance can answer; only what it wrote this
+    episode can. Three arms: no run-time store; a separate data memory; one store (run-time
+    writes land in the program bank as new entries). Then: do the writes still help when
+    they are kept across episodes (the first step toward learning continually), and is
+    "growing the bank" the same act as a run-time write.
 
 Gate: most of the bank in use without hand-holding, and a clear win at equal compute on
 something past 0b.
