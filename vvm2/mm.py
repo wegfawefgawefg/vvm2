@@ -32,12 +32,13 @@ from .classic import TASKS, params, score, shifted, train
 
 class MMVVM(nn.Module):
     def __init__(self, n_in, n_out, scratch=64, ops=1024, k=32, ticks=4, d_key=16,
-                 write="slot"):
+                 write="slot", address="scratch"):
         super().__init__()
+        self.address = address  # "scratch": only the scratchpad; "both": the input too
         self.n_in, self.n_out, self.scratch, self.ops = n_in, n_out, scratch, ops
         self.k, self.ticks, self.d_key, self.write = k, ticks, d_key, write
         can_write = scratch + n_out
-        self.query = nn.Linear(scratch, d_key)
+        self.query = nn.Linear(scratch if address == "scratch" else scratch + n_in, d_key)
         self.keys = nn.Parameter(torch.randn(ops, d_key) / math.sqrt(d_key))
         self.read = nn.Parameter(torch.randn(ops, n_in + can_write) / math.sqrt(n_in + can_write))
         self.bias = nn.Parameter(torch.zeros(ops))
@@ -52,8 +53,10 @@ class MMVVM(nn.Module):
     def forward(self, inp):
         mem = inp.new_zeros(len(inp), self.scratch + self.n_out)   # scratch, then output
         for _ in range(self.ticks):
-            q = F.layer_norm(self.query(F.layer_norm(mem[:, :self.scratch], (self.scratch,))),
-                             (self.d_key,))
+            where = F.layer_norm(mem[:, :self.scratch], (self.scratch,))
+            if self.address == "both":
+                where = torch.cat([where, inp], dim=1)
+            q = F.layer_norm(self.query(where), (self.d_key,))
             sc, idx = (q @ self.keys.T).topk(self.k, dim=-1)        # [B, k]
             w = torch.softmax(sc, dim=-1) * self.k
             seen = torch.cat([inp, mem], dim=1)
@@ -92,7 +95,7 @@ def classify(task):
             int((model.picks > 0).sum()), model.ops))
 
 
-def draw(task):
+def draw(task, ticks=4, name=None):
     """Generate images. The input domain is a class (10 slots, one on) and a style code of
     8 numbers; the output domain is the canvas. Trained as an autoencoder: the style code of
     a training image is made by a small linear map from that image, and the vvm must paint
@@ -104,7 +107,7 @@ def draw(task):
     torch.set_num_threads(8)
     x, y = TASKS[task](0)[:2]
     torch.manual_seed(0)
-    model = MMVVM(18, 784, ticks=4, write="vector", ops=1024, k=32)
+    model = MMVVM(18, 784, ticks=ticks, write="vector", ops=1024, k=32)
     coder = nn.Linear(784, 8)
     opt = torch.optim.AdamW(list(model.parameters()) + list(coder.parameters()), lr=2e-3,
                             weight_decay=0.01)
@@ -146,11 +149,15 @@ def draw(task):
                      "training images. The other ten: generated from the class and a random "
                      "style code." % task, fontsize=11, x=0.02, ha="left")
         fig.tight_layout(rect=(0, 0, 1, 0.97))
-        fig.savefig("docs/img/drawn-%s.png" % task, dpi=100)
-    print("  wrote docs/img/drawn-%s.png" % task)
+        fig.savefig("docs/img/%s.png" % (name or "drawn-" + task), dpi=100)
+    print("  wrote docs/img/%s.png" % (name or "drawn-" + task))
 
 
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "class"
     which = sys.argv[2] if len(sys.argv) > 2 else "mnist"
-    (classify if what == "class" else draw)(which)
+    if what == "class":
+        classify(which)
+    else:  # draw TASK [TICKS NAME]
+        draw(which, int(sys.argv[3]) if len(sys.argv) > 3 else 4,
+             sys.argv[4] if len(sys.argv) > 4 else None)
