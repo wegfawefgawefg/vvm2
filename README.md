@@ -29,4 +29,7 @@ scripts/setup.sh        make .venv with CPU torch
 scripts/smoke.sh        every task and model, tiny, end to end
 scripts/classic.sh all  xor, a sine curve, two spirals, MNIST: the vvm against an MLP
 scripts/tree.sh         do the walks form a tree
+scripts/mm.sh class     the memory-mapped vvm: input, scratchpad and output as separate domains
+scripts/mm.sh draw      the same vvm generating digits
+scripts/halt.sh         halting: the vvm says when it is done
 ```

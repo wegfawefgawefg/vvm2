@@ -61,4 +61,16 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
 14. **First numbers off MNIST** [hint: one seed, no baseline run beside them yet]: 16 full
     vops, 3 ticks, weight decay, shifted images: MNIST 0.985, Kuzushiji-MNIST 0.906,
     Fashion-MNIST 0.874. Pictures of what each class's path uses: `docs/img/paths-*.png`.
+15. **The memory-mapped vvm is the first form in which both the ticks and the bank clearly
+    do work.** [hint: one seed, `scripts/mm.sh class`] Input and output as their own
+    domains, the state a scratchpad that starts empty, 1,024 flat vops, 32 fetched a tick,
+    no input map and no readout (the answer is what the vops wrote into 10 output slots).
+    MNIST: writing one slot a vop, 0.927 at one tick and 0.976 at four, 703 of 1,024 vops in
+    use; writing along a vector, 0.961 and 0.986, 756 in use. The first tick fetches the
+    same 32 vops for every image (the scratchpad is empty): a boot routine.
+16. **The same vvm draws.** [hint: one seed, `scripts/mm.sh draw`] Input domain a class and a
+    style code of 8 numbers, output domain a 784-pixel canvas, 4 ticks: it paints
+    recognisable, varied digits from a class and a random code (`docs/img/drawn-mnist.png`).
+    Trained as an autoencoder, with a small linear map outside the vvm making the code from
+    the training image; a separate vvm from the classifier, same code and same tick.
 
