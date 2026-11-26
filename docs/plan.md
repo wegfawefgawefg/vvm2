@@ -38,6 +38,22 @@ parameter count, once on compute per step. Both numbers are in every table.
     writes land in the program bank as new entries). Then: do the writes still help when
     they are kept across episodes (the first step toward learning continually), and is
     "growing the bank" the same act as a run-time write.
+    How a write lands without trampling what was learned, each as its own arm: (1) blend
+    and renormalise: the entry becomes norm(old + strength x new), so a write shifts an
+    entry and never replaces it, and every vector's size ("brightness") stays bounded;
+    (2) stiffness by use: an entry that has been read or trained many times takes writes
+    weakly, a rarely used one takes them strongly; (3) fresh entries for what matches
+    nothing well. Also: brightness as a signal of its own, an entry's size standing for how
+    much it is trusted, fading when unused, so the dim ones are what a shrink removes.
+0i. Credit past the backprop window, after 0f works. Five ways to leave something around,
+    each tried alone on a task whose gap is longer than the window (delayed copy, n-back,
+    a long pointer chase), between two fixed lines: truncated backprop at that window (the
+    floor) and backprop through the whole sequence (the ceiling). (1) Credit along
+    lookups: the gradient goes from a read straight to the write it found. (2) A fading
+    trace kept with each entry. (3) A learned guess of the future's gradient at the
+    window's edge. (4) A usefulness score per entry or stored item, bootstrapped. (5) Side
+    objectives: predict the next input, reconstruct what was stored. Report what each
+    costs in memory and compute per step beside what it buys.
 
 Gate: most of the bank in use without hand-holding, and a clear win at equal compute on
 something past 0b.
@@ -69,22 +85,7 @@ dense model that fits the GPU.
 
 ## Todo, not scheduled
 
-- **Credit past the backprop window, without a global pass.** Backprop through n steps
-  only teaches the machine to keep something for at most n steps. Ways to reach further,
-  to try once sequences work at all:
-  1. Credit along lookups, not along ticks: when a read at step t+1000 finds something
-     written at step t, send the gradient straight from the read to the write and skip the
-     steps between (sparse attentive backtracking, Ke et al. 2018; temporal value
-     transport, Hung et al. 2019). The natural fit here, since the data memory already
-     records who read what.
-  2. A trace kept with each entry: how much that entry has pushed the current state,
-     carried forward and decayed, so a later error can still reach it (eligibility traces,
-     e-prop; the sparse forward-mode family, SnAp, Menick et al. 2020, which gets cheap
-     exactly when few entries are touched per step).
-  3. A learned guess of the future's gradient at the window's edge, trained by
-     bootstrapping from the next window, so credit creeps back a window per pass
-     (synthetic gradients, Jaderberg et al. 2016).
-  4. A usefulness score kept with each entry or stored item, bootstrapped the same way
-     (as a value function is), deciding what is kept and what is overwritten.
-  5. Side objectives that make the machine keep things with no long gradient at all:
-     predict the next input, reconstruct what was stored.
+Nothing here yet. (Credit past the backprop window moved up to 0i; its references:
+sparse attentive backtracking, Ke et al. 2018; temporal value transport, Hung et al. 2019;
+eligibility traces and e-prop; SnAp, Menick et al. 2020; synthetic gradients, Jaderberg et
+al. 2016.)
