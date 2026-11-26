@@ -1,4 +1,4 @@
-# The machine, version 0
+# The vvm, version 0
 
 Plain statement of what is built first. Everything here is a starting point to be measured,
 not a belief.
@@ -16,12 +16,12 @@ not a belief.
   - Apply: `state = state + edit`. Doing nothing is the default; an entry only edits.
   - Several heads may query at once.
 - **Data memory**: a store of (key, value) pairs written at run time and read with the same
-  top-k lookup. Write ("fractional store"): the machine emits a key, a value and a strength
+  top-k lookup. Write ("fractional store"): the vvm emits a key, a value and a strength
   each tick. Version 0 keeps it apart from the program bank and clears it each episode.
   Whether the two can be one store with a slow write path (gradient) and a fast one (the
   machine's own writes) is an open question, and the answer to "will it learn continually".
 - **ALU**: one small dense residual block (`state += W2 . act(W1 . norm(state))`), applied
-  every tick. Its width is the machine's compute budget.
+  every tick. Its width is the vvm's compute budget.
 - **Ticks**: T ticks per input with the same weights. The readout is a linear map of the
   state after the last tick.
 
@@ -56,7 +56,7 @@ Measured on the original, run unchanged (thonksheet, docs/results-2026-11-25-vm-
 
 - Entries read sparsely are worth much less per parameter than dense weights. They are
   cheap per unit of compute. A terabyte bank is not a terabyte dense model.
-- The ALU's width sets how well the machine reasons; the bank adds knowledge and skills.
+- The ALU's width sets how well the vvm reasons; the bank adds knowledge and skills.
 - One state vector is a bottleneck for sequences; the data memory is there to remove it.
 
 ## Prior work this leans on

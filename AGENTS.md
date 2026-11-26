@@ -18,7 +18,7 @@ no private paths, names, hostnames or keys in anything tracked.
   bank is fine when the score is good. The fault is being locked in: a poor score beside
   unused entries, the same entries whatever the input, or no more of the bank drawn on
   when the task grows or changes.
-- Look inside a win before calling it one: what does the machine do tick by tick.
+- Look inside a win before calling it one: what does the vvm do tick by tick.
 - A null stated cleanly is a good result. Say what you did not do.
 
 ## Layout and style

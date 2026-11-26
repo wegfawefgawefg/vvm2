@@ -7,7 +7,7 @@
 #           6000 steps, batch 512, no weight decay
 #   chase   0d pointer chasing as in scripts/0d_chase.sh, bank 4096 entries (4 entries a
 #           training pair), 4 ticks, 6000 steps, batch 256, weight decay 1
-# Lines (the machine otherwise as in 0b and 0d; all noise is in training only):
+# Lines (the vvm otherwise as in 0b and 0d; all noise is in training only):
 #   none             no remedy; query normalised by layer norm, the default
 #   pick_from 32     the exact top 32 entries, 8 of them kept at random
 #   gumbel 1         Gumbel noise of scale 1 on the sub-key scores before the top-k

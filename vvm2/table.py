@@ -3,7 +3,7 @@
   python -m vvm2.table out/0b_assoc.jsonl --split items
   python -m vvm2.table out/0b_assoc.jsonl --pivot items   test accuracy, one column a value
   python -m vvm2.table out/0d_chase.jsonl --groups        accuracy per test group (h)
-  python -m vvm2.table out/0d_chase.jsonl --lens "machine T=4"   the look inside
+  python -m vvm2.table out/0d_chase.jsonl --lens "vvm T=4"   the look inside
 
 Rows with the same label (and the same --split setting) are seeds of one line. Every line
 has the parameter count and the multiply-adds per example. Accuracies are the mean over
@@ -42,9 +42,9 @@ def spread(xs):
 
 
 def grouped(rows, split):
-    """{split value: {label: [rows]}}; machine lines first, then by label."""
+    """{split value: {label: [rows]}}; vvm lines first, then by label."""
     out = defaultdict(lambda: defaultdict(list))
-    for r in sorted(rows, key=lambda r: (r["model"] != "machine", r["label"], r["seed"])):
+    for r in sorted(rows, key=lambda r: (r["model"] != "vvm", r["label"], r["seed"])):
         out[r["args"].get(split) if split else None][r["label"]].append(r)
     return dict(sorted(out.items(), key=lambda kv: (isinstance(kv[0], str), kv[0] or 0)))
 
@@ -142,7 +142,7 @@ def main():
     p.add_argument("--pivot", default="", help="a setting; test accuracy per value of it")
     p.add_argument("--groups", action="store_true", help="test accuracy per test group")
     p.add_argument("--heads", action="store_true", help="bank use per head")
-    p.add_argument("--lens", default="", help="label of the machine rows to look inside")
+    p.add_argument("--lens", default="", help="label of the vvm rows to look inside")
     args = p.parse_args()
     if args.pivot:
         pivot_table(load(args.paths), args.pivot)

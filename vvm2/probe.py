@@ -1,8 +1,8 @@
-"""Looking inside the machine on pointer chasing: does the state walk f one hop a tick?
+"""Looking inside the vvm on pointer chasing: does the state walk f one hop a tick?
 
 Two measurements, both on all (x, h) pairs of the task:
 
-lens    No fitting. The machine's own readout is applied to the state after every tick.
+lens    No fitting. The vvm's own readout is applied to the state after every tick.
         lens[h][j][i] is the share of the inputs with count h whose decoded item after
         tick j+1 equals f applied i times to x (i = 0 is x itself). A walk shows as a
         diagonal in the table for the largest h.
@@ -75,7 +75,7 @@ def walk_probe(states, start, h, powers, seed=0, ridge=1e-2):
 
 
 def look_inside(model, task):
-    """The lens and the probe for a machine trained on the chase task."""
+    """The lens and the probe for a vvm trained on the chase task."""
     meta = task["meta"]
     x = torch.cat([task["train_x"], task["test_x"]])
     start, h = x[:, 0], x[:, 1] - meta["items"] + 1

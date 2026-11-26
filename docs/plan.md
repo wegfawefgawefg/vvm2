@@ -8,16 +8,16 @@ changed, not pushed through. Status is updated as things land.
 Every result is beside an MLP, a GRU and a small transformer, matched twice: once on
 parameter count, once on compute per step. Both numbers are in every table.
 
-0a. *(queued)* Foundation: the machine of `docs/design.md`, the three baselines, the
+0a. *(queued)* Foundation: the vvm of `docs/design.md`, the three baselines, the
     training harness with parameter and compute accounting, the bank-use measurements, and
     the first tasks (0b to 0d) running end to end.
 0b. Stored associations: random key to value, N items. What it shows: capacity per entry
-    and per unit of compute. Expected to be the machine's best case.
+    and per unit of compute. Expected to be the vvm's best case.
 0c. Modular addition and parity. What it shows: retrieved edits can compute, not only store.
 0d. Pointer chasing: follow a learned map k times, one hop a tick. What it shows: the walk.
 0e. Bank collapse against the remedies in `docs/design.md`, cheapest first (noise in the
     pick, in the query, in the state; then normalisation; then re-seeding).
-    Noise here means literal noise added to the vectors while the machine runs (the
+    Noise here means literal noise added to the vectors while the vvm runs (the
     owner: "brains are full of noise"), at a strength that can be set for each place: the
     state, the query (the address), a value as it is read, a value as it is written, and
     which entries are picked. Measure for each, beyond collapse: does a learned walk
@@ -30,9 +30,9 @@ parameter count, once on compute per step. Both numbers are in every table.
     bandwidth and whether the run-time store removes the limit.
 0g. Kuzushiji-MNIST, then a character-level language model on a small text.
 0h. Does it learn to learn. The owner's hope for making program memory and data memory one
-    store: an entry the machine writes while running is found and applied exactly as a
-    learned entry is, so the machine can add an operation to itself from one example.
-    Test: every episode has a fresh random map; the machine is shown some of its pairs,
+    store: an entry the vvm writes while running is found and applied exactly as a
+    learned entry is, so the vvm can add an operation to itself from one example.
+    Test: every episode has a fresh random map; the vvm is shown some of its pairs,
     then asked about them. Nothing learned in advance can answer; only what it wrote this
     episode can. Three arms: no run-time store; a separate data memory; one store (run-time
     writes land in the program bank as new entries). Then: do the writes still help when

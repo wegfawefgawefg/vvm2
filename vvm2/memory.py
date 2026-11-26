@@ -1,4 +1,4 @@
-"""Data memory, version 0: a run-time store the machine writes while it runs.
+"""Data memory, version 0: a run-time store the vvm writes while it runs.
 
 One slot is appended per write (key, value, strength, all emitted from the state). A read
 makes a query from the state, takes the top k slots by score, and returns the weighted sum

@@ -1,7 +1,7 @@
 """Baselines: an MLP, a GRU and a small transformer, each sizable by one width.
 
 All take x [B, L] token ids and return logits [B, classes]. Each has madds(length): the
-multiply-adds for one example, by part, counted the same way as the machine (one per
+multiply-adds for one example, by part, counted the same way as the vvm (one per
 weight use in a matrix product, the width of a row per embedding read, the width of a
 vector per norm; biases and activations free).
 """
@@ -39,7 +39,7 @@ class MLP(nn.Module):
 
 class GRU(nn.Module):
     """Reads the tokens one a step, then `ponder` further steps with a zero input, and
-    reads out from the last hidden state. With ponder it is a dense tied-weight machine."""
+    reads out from the last hidden state. With ponder it is a dense tied-weight vvm."""
 
     def __init__(self, vocab, length, classes, width, ponder=0):
         super().__init__()

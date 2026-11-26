@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The ordinary tasks: the machine against an MLP of the same parameter count.
+# The ordinary tasks: the vvm against an MLP of the same parameter count.
 #   scripts/classic.sh xor | sin | spirals | mnist [--steps N --seeds N --entries N ...]
 #   scripts/classic.sh all
 # mnist needs scripts/get_mnist.sh once. Flags are those of `python -m vvm2.classic -h`.

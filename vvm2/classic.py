@@ -5,10 +5,10 @@
   python -m vvm2.classic spirals
   python -m vvm2.classic mnist --steps 3000
 
-Each line trains the machine and an MLP of the same parameter count on the same data with
+Each line trains the vvm and an MLP of the same parameter count on the same data with
 the same optimiser and prints one row a model: parameters, multiply-adds per example, the
-train and the held-out score, and for the machine how its bank was used. The machine here
-is vvm2.machine.Machine with one change: the input is a real vector, written into the state
+train and the held-out score, and for the vvm how its bank was used. The vvm here
+is vvm2.vvm.VVM with one change: the input is a real vector, written into the state
 through a linear map instead of a token embedding.
 """
 import argparse
@@ -22,10 +22,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .bank import use_stats
-from .machine import Machine
+from .vvm import VVM
 
 
-class RealMachine(Machine):
+class RealVVM(VVM):
     def __init__(self, in_features, outputs, **kw):
         super().__init__(vocab=1, classes=outputs, **kw)
         self.in_features = in_features
@@ -197,26 +197,26 @@ def main():
     print("| model | params | madds | train | test | bank used | eff. entries | top | "
           "pick overlap | s |")
     print("|---|---|---|---|---|---|---|---|---|---|")
-    for name in ["machine", "machine, no bank", "machine, no alu", "mlp"]:
+    for name in ["vvm", "vvm, no bank", "vvm, no alu", "mlp"]:
         rows = []
         for seed in range(args.seeds):
             data = TASKS[args.task](seed)
             ins = data[0].shape[1]
             outs = int(data[1].max()) + 1 if kind == "class" else 1
             torch.manual_seed(seed)
-            ref = RealMachine(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
+            ref = RealVVM(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
                               entries=args.entries, heads=args.heads, k=args.k,
                               snoise=args.snoise, qnoise=args.qnoise, sparse=False)
             if name == "mlp":
                 model = mlp_matched(ins, outs, params(ref))
-            elif name == "machine":
+            elif name == "vvm":
                 model = ref
             else:
-                model = RealMachine(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
+                model = RealVVM(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
                                     entries=args.entries, heads=args.heads, k=args.k,
                                     snoise=args.snoise, qnoise=args.qnoise, sparse=False,
-                                    use_bank=name != "machine, no bank",
-                                    use_alu=name != "machine, no alu")
+                                    use_bank=name != "vvm, no bank",
+                                    use_alu=name != "vvm, no alu")
             tr, te, secs = train(model, data, args.steps, args.batch, args.lr, seed)
             use = bank_use(model, data[2]) if getattr(model, "bank", None) is not None else None
             rows.append((params(model), model.madds_total(), tr, te, use, secs))

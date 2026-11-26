@@ -1,9 +1,9 @@
 """One training run, one results row.
 
-  python -m vvm2.train --task assoc --model machine --seed 0 --out out/x.jsonl
+  python -m vvm2.train --task assoc --model vvm --seed 0 --out out/x.jsonl
 
-A baseline is sized either by --width or by --match params|madds, which builds the machine
-described by the machine flags on the same task and sizes the baseline to its parameter
+A baseline is sized either by --width or by --match params|madds, which builds the vvm
+described by the vvm flags on the same task and sizes the baseline to its parameter
 count or to its multiply-adds per example. The row (one JSON line appended to --out) holds
 the settings, both counts, the accuracies and the bank-use numbers. A run whose settings
 are already in the file is skipped unless --force is given.
@@ -20,7 +20,7 @@ import torch.nn.functional as F
 
 from .bank import use_stats
 from .baselines import GRU, MLP, Transformer, count_madds, count_params, fit_width
-from .machine import Machine
+from .vvm import VVM
 from .probe import look_inside, walk_loss
 from .tasks import make_task
 
@@ -35,13 +35,13 @@ def parse(argv=None):
                        ("holdout", float), ("pairs", int)]:
         a("--" + name, type=kind, default=None)
     # model
-    a("--model", default="machine", choices=["machine", "mlp", "gru", "transformer"])
+    a("--model", default="vvm", choices=["vvm", "mlp", "gru", "transformer"])
     a("--width", type=int, default=64, help="baseline width when --match is not given")
     a("--match", default="", choices=["", "params", "madds"])
     a("--depth", type=int, default=2, help="mlp layers before the readout")
     a("--layers", type=int, default=2, help="transformer blocks")
     a("--ponder", type=int, default=0, help="gru: extra steps with a zero input")
-    # machine
+    # vvm
     a("--d", type=int, default=64)
     a("--regs", type=int, default=1)
     a("--ticks", type=int, default=2)
@@ -76,7 +76,7 @@ def parse(argv=None):
     a("--threads", type=int, default=4)
     a("--evals", type=int, default=4, help="points on the accuracy curve")
     a("--tick_loss", type=int, default=0,
-      help="1: chase, machine only: supervise the readout after every tick (probe.walk_loss)")
+      help="1: chase, vvm only: supervise the readout after every tick (probe.walk_loss)")
     # output
     a("--out", default="out/runs.jsonl")
     a("--label", default="")
@@ -84,8 +84,8 @@ def parse(argv=None):
     return p.parse_args(argv)
 
 
-def machine_from(args, task):
-    return Machine(
+def vvm_from(args, task):
+    return VVM(
         task["vocab"], task["classes"], d=args.d, regs=args.regs, ticks=args.ticks,
         feed=args.feed, hold=bool(args.hold), alu=args.alu, use_bank=not args.no_bank,
         use_alu=not args.no_alu, use_mem=bool(args.mem), snoise=args.snoise,
@@ -105,14 +105,14 @@ def baseline_from(args, task, width):
 
 
 def build(args, task):
-    """The model, and the reference machine's counts if the model was matched to one."""
-    if args.model == "machine":
-        return machine_from(args, task), None
+    """The model, and the reference vvm's counts if the model was matched to one."""
+    if args.model == "vvm":
+        return vvm_from(args, task), None
     ref = None
     width = args.width
     if args.match:
-        machine = machine_from(args, task)
-        ref = {"params": count_params(machine), "madds": count_madds(machine, task["length"])}
+        vvm = vvm_from(args, task)
+        ref = {"params": count_params(vvm), "madds": count_madds(vvm, task["length"])}
         measure = count_params if args.match == "params" else (
             lambda m: count_madds(m, task["length"]))
         step = 4 if args.model == "transformer" else 2
@@ -153,7 +153,7 @@ def correct(model, x, y, batch=4096):
 
 
 def evaluate(model, task, max_train=16384):
-    """Accuracies and, for the machine, the bank's use over every lookup of the pass."""
+    """Accuracies and, for the vvm, the bank's use over every lookup of the pass."""
     bank = getattr(model, "bank", None)
     if bank is not None:
         bank.reset_counts()
@@ -249,7 +249,7 @@ def main(argv=None):
     start = time.time()
     row["curve"] = train(model, task, args)
     row.update(evaluate(model, task))
-    if args.task == "chase" and args.model == "machine":
+    if args.task == "chase" and args.model == "vvm":
         row.update(look_inside(model, task))
     row["secs"] = round(time.time() - start, 1)
     row["args"] = vars(args)

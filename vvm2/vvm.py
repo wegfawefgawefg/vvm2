@@ -1,4 +1,4 @@
-"""The machine, version 0 (docs/design.md).
+"""The vvm, version 0 (docs/design.md).
 
 State: `regs` registers of width d. One tick, in order:
   1. input write: the input's embedding is added to register 0 (on the first tick of an
@@ -38,7 +38,7 @@ class ALU(nn.Module):
         return {"alu": 2 * self.dim * self.width + self.dim}
 
 
-class Machine(nn.Module):
+class VVM(nn.Module):
     def __init__(self, vocab, classes, d=64, regs=1, ticks=2, feed="whole", hold=False,
                  alu=128, use_bank=True, use_alu=True, use_mem=False, snoise=0.0,
                  mem_k=4, mem_key=32, **bank_args):

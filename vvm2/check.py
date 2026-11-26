@@ -6,7 +6,7 @@ import torch
 
 from .bank import Bank
 from .baselines import GRU, MLP, Transformer, count_madds, count_params, fit_width
-from .machine import Machine
+from .vvm import VVM
 
 
 def check_exact_topk():
@@ -47,11 +47,11 @@ def check_noise_is_training_only():
 
 
 def check_accounting():
-    """The machine's compute does not count the unread bank: a bank 1024 times larger
+    """The vvm's compute does not count the unread bank: a bank 1024 times larger
     costs only the extra sub-key scoring (which grows with sqrt(N)). Baselines size to a
     target."""
-    small = Machine(40, 10, entries=1024, ticks=2, heads=2, d_key=32)
-    large = Machine(40, 10, entries=1024 * 1024, ticks=2, heads=2, d_key=32)
+    small = VVM(40, 10, entries=1024, ticks=2, heads=2, d_key=32)
+    large = VVM(40, 10, entries=1024 * 1024, ticks=2, heads=2, d_key=32)
     assert count_params(large) - count_params(small) > 1000 * 1024 * 64
     extra = count_madds(large, 2) - count_madds(small, 2)
     assert extra == 2 * 2 * 32 * (1024 - 32)  # ticks * heads * d_key * (side difference)
@@ -63,17 +63,17 @@ def check_accounting():
             assert abs(got - target) < 0.15 * target, (got, target)
 
 
-def check_machine_runs():
+def check_vvm_runs():
     x = torch.randint(40, (7, 5))
     for kw in (dict(), dict(regs=3, heads=4), dict(feed="seq", use_mem=True, regs=2),
                dict(use_bank=False), dict(use_alu=False), dict(hold=True, snoise=0.1)):
         record = []
-        machine = Machine(40, 10, entries=256, ticks=3, **kw)
-        out = machine(x, record=record)
+        vvm = VVM(40, 10, entries=256, ticks=3, **kw)
+        out = vvm(x, record=record)
         assert out.shape == (7, 10)
         assert len(record) == 3 * (5 if kw.get("feed") == "seq" else 1)
         out.sum().backward()
-        assert count_madds(machine, 5) > 0
+        assert count_madds(vvm, 5) > 0
 
 
 if __name__ == "__main__":
