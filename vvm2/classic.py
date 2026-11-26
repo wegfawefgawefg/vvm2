@@ -7,9 +7,10 @@
 
 Each line trains the vvm and an MLP of the same parameter count on the same data with
 the same optimiser and prints one row a model: parameters, multiply-adds per example, the
-train and the held-out score, and for the vvm how its bank was used. The vvm here
-is vvm2.vvm.VVM with one change: the input is a real vector, written into the state
-through a linear map instead of a token embedding.
+train and the held-out score, and for the vvm how its bank was used. The vvm here is a
+state and a bank of ops and nothing else: each tick the state forms an address, the nearest
+few ops are found and applied to the state. The input is written into the state through a
+linear map and the answer read out through another; the "no bank" row is those two alone.
 """
 import argparse
 import math
@@ -185,7 +186,6 @@ def main():
     a("--entries", type=int, default=1024)
     a("--heads", type=int, default=2)
     a("--k", type=int, default=8)
-    a("--alu", type=int, default=64)
     a("--snoise", type=float, default=0.0, help="noise on the state, in its rms")
     a("--qnoise", type=float, default=0.0, help="noise on the query (the address)")
     a("--threads", type=int, default=4)
@@ -197,26 +197,25 @@ def main():
     print("| model | params | madds | train | test | bank used | eff. entries | top | "
           "pick overlap | s |")
     print("|---|---|---|---|---|---|---|---|---|---|")
-    for name in ["vvm", "vvm, no bank", "vvm, no alu", "mlp"]:
+    # vvm: the state and the bank of ops, nothing else. "no bank": only the input write and
+    # the readout, which is a linear model: what the ops have to beat.
+    for name in ["vvm", "no bank (input write + readout only)", "mlp"]:
         rows = []
         for seed in range(args.seeds):
             data = TASKS[args.task](seed)
             ins = data[0].shape[1]
             outs = int(data[1].max()) + 1 if kind == "class" else 1
             torch.manual_seed(seed)
-            ref = RealVVM(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
-                              entries=args.entries, heads=args.heads, k=args.k,
-                              snoise=args.snoise, qnoise=args.qnoise, sparse=False)
+
+            def make(bank):
+                return RealVVM(ins, outs, d=args.d, ticks=args.ticks, entries=args.entries,
+                               heads=args.heads, k=args.k, snoise=args.snoise,
+                               qnoise=args.qnoise, sparse=False, use_bank=bank)
+
             if name == "mlp":
-                model = mlp_matched(ins, outs, params(ref))
-            elif name == "vvm":
-                model = ref
+                model = mlp_matched(ins, outs, params(make(True)))
             else:
-                model = RealVVM(ins, outs, d=args.d, ticks=args.ticks, alu=args.alu,
-                                    entries=args.entries, heads=args.heads, k=args.k,
-                                    snoise=args.snoise, qnoise=args.qnoise, sparse=False,
-                                    use_bank=name != "vvm, no bank",
-                                    use_alu=name != "vvm, no alu")
+                model = make(name == "vvm")
             tr, te, secs = train(model, data, args.steps, args.batch, args.lr, seed)
             use = bank_use(model, data[2]) if getattr(model, "bank", None) is not None else None
             rows.append((params(model), model.madds_total(), tr, te, use, secs))

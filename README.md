@@ -12,7 +12,8 @@ fractional:
   state as a small edit. Only those few entries are read, so the cost of a step does not
   grow with the size of the bank.
 - **Data memory**: the same kind of lookup into a store the vvm writes while it runs.
-- **ALU**: a small dense block applied every tick; the fixed instruction set.
+- **ALU**: the step that applies the retrieved ops to the state. There is no dense layer;
+  the bank of ops is the only thing that computes.
 - **Ticks**: the same bank on every tick, several ticks per input, so the lookups form a
   walk through a program.
 

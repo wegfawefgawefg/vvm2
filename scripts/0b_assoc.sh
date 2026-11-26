@@ -4,13 +4,13 @@
 # Recipe. Task: `items` random pairs; key = 8 random base-16 digits, value = one of 64
 # classes (6 bits a pair). items in 4096, 16384, 65536; steps 4000, 6000, 12000; batch 512;
 # lr 3e-3, bank lr 3e-2 (from scripts/pilot.sh store), no weight decay; seeds 0 1 2.
-# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, ALU 128, bank 4096
+# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, bank 4096
 # entries, 2 ticks. Lines:
 #   vvm                  the reference
 #   vvm T=1              one tick
 #   vvm N=1024           a bank a quarter the size
 #   vvm N=65536          a bank 16 times the size (items >= 16384 only)
-#   vvm no bank          the ALU alone
+#   vvm no bank          no ops: the input write and the readout alone
 #   mlp|gru|transformer params   sized to the reference vvm's parameter count
 #   mlp|gru|transformer madds    sized to the reference vvm's multiply-adds
 #

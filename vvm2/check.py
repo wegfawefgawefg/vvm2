@@ -66,7 +66,7 @@ def check_accounting():
 def check_vvm_runs():
     x = torch.randint(40, (7, 5))
     for kw in (dict(), dict(regs=3, heads=4), dict(feed="seq", use_mem=True, regs=2),
-               dict(use_bank=False), dict(use_alu=False), dict(hold=True, snoise=0.1)):
+               dict(use_bank=False), dict(hold=True, snoise=0.1)):
         record = []
         vvm = VVM(40, 10, entries=256, ticks=3, **kw)
         out = vvm(x, record=record)

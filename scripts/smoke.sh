@@ -23,7 +23,6 @@ RUN=".venv/bin/python -m vvm2.train --threads 2 --steps 60 --evals 2 --entries 2
     # every noise switch at once, the parts switched off, the other options
     echo "$RUN --task assoc --items 256 --pick_from 16 --gumbel 1 --qnoise 0.3 --snoise 0.1 --label 'assoc vvm noisy' >/dev/null"
     echo "$RUN --task assoc --items 256 --no_bank 1 --label 'assoc vvm no bank' >/dev/null"
-    echo "$RUN --task assoc --items 256 --no_alu 1 --hold 1 --qnorm batch --label 'assoc vvm no alu' >/dev/null"
     echo "$RUN --task chase --items 16 --hops 3 --model gru --ponder 3 --match params --label 'chase gru ponder' >/dev/null"
     echo "$RUN --task chase --items 16 --hops 3 --ticks 3 --tick_loss 1 --vdecay 1 --label 'chase vvm tick loss' >/dev/null"
 } | scripts/par.sh
@@ -32,5 +31,5 @@ RUN=".venv/bin/python -m vvm2.train --threads 2 --steps 60 --evals 2 --entries 2
 .venv/bin/python -m vvm2.table "$OUT" --heads
 .venv/bin/python -m vvm2.table "$OUT" --lens "chase vvm"
 rows=$(wc -l < "$OUT")
-[ "$rows" -eq 45 ] || { echo "smoke: expected 45 rows, got $rows"; exit 1; }
+[ "$rows" -eq 44 ] || { echo "smoke: expected 45 rows, got $rows"; exit 1; }
 echo "smoke ok: $rows runs"

@@ -5,15 +5,16 @@ State: `regs` registers of width d. One tick, in order:
      input, or on every tick if hold is set);
   2. data memory read (if there is one): the edit is added to the last register;
   3. program bank lookup: head h adds its edit to register h mod regs;
-  4. ALU: one dense residual block over the whole state;
-  5. data memory write.
+  4. data memory write.
+Applying an op means adding its vector to the state, weighted by how well its key matched.
+There is no dense layer on the state: the bank of ops is the only thing that computes.
 The same weights on every tick. The readout is a linear map of the normalised state after
 the last tick.
 
 feed "whole": the tokens of an example are one input (their embeddings summed), followed
 by `ticks` ticks. feed "seq": each token is an input with `ticks` ticks of its own.
 
-Parts switch off with use_bank / use_alu / use_mem. Noise (training only): snoise in the
+Parts switch off with use_bank / use_mem. Noise (training only): snoise in the
 state here; the pick and query noise live in the bank.
 """
 import torch
@@ -23,24 +24,9 @@ from .bank import Bank
 from .memory import DataMemory
 
 
-class ALU(nn.Module):
-    def __init__(self, dim, width):
-        super().__init__()
-        self.dim, self.width = dim, width
-        self.norm = nn.LayerNorm(dim)
-        self.w1 = nn.Linear(dim, width)
-        self.w2 = nn.Linear(width, dim)
-
-    def forward(self, x):
-        return self.w2(torch.nn.functional.gelu(self.w1(self.norm(x))))
-
-    def madds(self):
-        return {"alu": 2 * self.dim * self.width + self.dim}
-
-
 class VVM(nn.Module):
     def __init__(self, vocab, classes, d=64, regs=1, ticks=2, feed="whole", hold=False,
-                 alu=128, use_bank=True, use_alu=True, use_mem=False, snoise=0.0,
+                 use_bank=True, use_mem=False, snoise=0.0,
                  mem_k=4, mem_key=32, **bank_args):
         super().__init__()
         self.d, self.regs, self.ticks, self.feed, self.hold = d, regs, ticks, feed, hold
@@ -48,7 +34,6 @@ class VVM(nn.Module):
         dim = regs * d
         self.embed = nn.Embedding(vocab, d)
         self.bank = Bank(dim, d_value=d, **bank_args) if use_bank else None
-        self.alu = ALU(dim, alu) if use_alu else None
         self.mem = DataMemory(dim, d, d_key=mem_key, k=mem_k) if use_mem else None
         self.out_norm = nn.LayerNorm(dim)
         self.readout = nn.Linear(dim, classes)
@@ -76,8 +61,6 @@ class VVM(nn.Module):
                 state = torch.cat([state[:, :-1], state[:, -1:] + got.unsqueeze(1)], dim=1)
         if self.bank is not None:
             state = state.index_add(1, self.head_reg, self.bank(state.flatten(1)))
-        if self.alu is not None:
-            state = state + self.alu(state.flatten(1)).view_as(state)
         if self.mem is not None:
             self.mem.write(state.flatten(1))
         return state
@@ -106,8 +89,6 @@ class VVM(nn.Module):
         per_tick = {}
         if self.bank is not None:
             per_tick.update(self.bank.madds())
-        if self.alu is not None:
-            per_tick.update(self.alu.madds())
         for name, cost in per_tick.items():
             parts[name] = cost * n_ticks
         if self.mem is not None:

@@ -7,12 +7,12 @@
 # this setting). Seeds 0 1 2.
 # Recipe, parity: 12 bits, 60% of the 4096 strings trained on. 6000 steps, batch 512, the
 # same learning rates, weight decay 0 and 1 (not piloted, so both).
-# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, ALU 128, bank 4096
+# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, bank 4096
 # entries, 2 ticks, the tokens of an example written as one input. Lines:
 #   vvm                  the reference
 #   vvm T=4              four ticks
 #   vvm vdecay           plus decay of the bank rows that were read (--vdecay 1)
-#   vvm no bank          the ALU alone
+#   vvm no bank          no ops: the input write and the readout alone
 #   vvm seq              parity only: one bit an input, one tick a bit
 #   mlp|gru|transformer params|madds    sized to the reference vvm
 #

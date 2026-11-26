@@ -1,7 +1,8 @@
 # Working here
 
 vvm2 is a research repo: a neural net shaped like a computer (registers, a learned program
-bank read sparsely, a run-time data memory, a small dense ALU), built so the bank can live
+bank of ops read sparsely and applied to the state, a run-time data memory, and no dense
+layer on the state), built so the bank can live
 on disk. Read `README.md`, `docs/design.md` and `docs/plan.md` first. The repo is public:
 no private paths, names, hostnames or keys in anything tracked.
 

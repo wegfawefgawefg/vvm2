@@ -20,8 +20,11 @@ not a belief.
   each tick. Version 0 keeps it apart from the program bank and clears it each episode.
   Whether the two can be one store with a slow write path (gradient) and a fast one (the
   machine's own writes) is an open question, and the answer to "will it learn continually".
-- **ALU**: one small dense residual block (`state += W2 . act(W1 . norm(state))`), applied
-  every tick. Its width is the vvm's compute budget.
+- **ALU**: the step that applies the retrieved ops to the state. Version 0 applies an op
+  by adding its vector, weighted by how well its key matched. There is no dense layer on
+  the state anywhere: the bank of ops is the only thing that computes. (A first build had
+  an ordinary dense block here; it was removed, because it is a standard net and would do
+  the work the ops are meant to do.) Richer ways to apply an op are an open question.
 - **Ticks**: T ticks per input with the same weights. The readout is a linear map of the
   state after the last tick.
 
@@ -56,7 +59,6 @@ Measured on the original, run unchanged (thonksheet, docs/results-2026-11-25-vm-
 
 - Entries read sparsely are worth much less per parameter than dense weights. They are
   cheap per unit of compute. A terabyte bank is not a terabyte dense model.
-- The ALU's width sets how well the vvm reasons; the bank adds knowledge and skills.
 - One state vector is a bottleneck for sequences; the data memory is there to remove it.
 
 ## Prior work this leans on

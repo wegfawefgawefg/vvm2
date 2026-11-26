@@ -47,7 +47,6 @@ def parse(argv=None):
     a("--ticks", type=int, default=2)
     a("--feed", default="whole", choices=["whole", "seq"])
     a("--hold", type=int, default=0, help="1: write the input on every tick, not the first")
-    a("--alu", type=int, default=128, help="ALU hidden width")
     a("--entries", type=int, default=4096)
     a("--heads", type=int, default=2)
     a("--k", type=int, default=8)
@@ -55,7 +54,6 @@ def parse(argv=None):
     a("--qnorm", default="layer", choices=["layer", "l2", "batch", "none"])
     a("--value_std", type=float, default=0.1)
     a("--no_bank", type=int, default=0)
-    a("--no_alu", type=int, default=0)
     a("--mem", type=int, default=0, help="1: with the data memory")
     a("--dense_bank", type=int, default=0, help="1: dense value gradients (for checks)")
     # noise switches (training only)
@@ -87,8 +85,8 @@ def parse(argv=None):
 def vvm_from(args, task):
     return VVM(
         task["vocab"], task["classes"], d=args.d, regs=args.regs, ticks=args.ticks,
-        feed=args.feed, hold=bool(args.hold), alu=args.alu, use_bank=not args.no_bank,
-        use_alu=not args.no_alu, use_mem=bool(args.mem), snoise=args.snoise,
+        feed=args.feed, hold=bool(args.hold), use_bank=not args.no_bank,
+        use_mem=bool(args.mem), snoise=args.snoise,
         entries=args.entries, heads=args.heads, k=args.k, d_key=args.d_key,
         qnorm=args.qnorm, pick_from=args.pick_from, gumbel=args.gumbel,
         qnoise=args.qnoise, value_std=args.value_std, sparse=not args.dense_bank)

@@ -5,14 +5,13 @@
 # applied h times to x. Training: every (x, 1) and 70% of the pairs with h >= 2. Test: the
 # held-out 30%, which only a walk of f can answer. 6000 steps, batch 256, lr 3e-3, bank lr
 # 3e-2, weight decay 1 and 0 on the dense matrices; seeds 0 1 2.
-# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, ALU 128, bank 1024
+# Reference vvm: d 64, 1 register, 2 heads, k 8, key width 32, bank 1024
 # entries (4 an item), 4 ticks, the input written on the first tick. Lines:
 #   vvm T=1|2|4|6        ticks against the count h (T=4 is the reference)
 #   vvm T=4 hold         the input written on every tick, as docs/design.md says
 #   vvm T=4 N=256        a bank with one entry an item
 #   vvm T=4 vdecay       decay of the bank rows that were read
-#   vvm T=4 no bank      the ALU alone
-#   vvm T=4 no alu       the bank alone
+#   vvm T=4 no bank      no ops: the input write and the readout alone
 #   vvm T=4|6 tick loss  not the task as set: the readout is supervised after every
 #                            tick with the walk's item (vvm2/probe.py walk_loss)
 #   vvm T=4 hold tick loss   the same with the input written on every tick
@@ -39,7 +38,6 @@ REF="--entries 1024 --ticks 4"
             echo "$T --entries 256 --ticks 4 --label 'vvm T=4 N=256' >/dev/null"
             echo "$T $REF --vdecay 1 --label 'vvm T=4 vdecay' >/dev/null"
             echo "$T $REF --no_bank 1 --label 'vvm T=4 no bank' >/dev/null"
-            echo "$T $REF --no_alu 1 --label 'vvm T=4 no alu' >/dev/null"
             echo "$T $REF --tick_loss 1 --label 'vvm T=4 tick loss' >/dev/null"
             echo "$T --entries 1024 --ticks 6 --tick_loss 1 --label 'vvm T=6 tick loss' >/dev/null"
             echo "$T $REF --hold 1 --tick_loss 1 --label 'vvm T=4 hold tick loss' >/dev/null"
