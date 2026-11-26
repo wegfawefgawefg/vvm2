@@ -2,14 +2,16 @@
 
   python -m vvm2.look [OPS FETCHED TICKS]        default 16 2 3
 
-Trains one vvm, then follows the best-matching vop of every tick for 5,000 test digits and
-draws two pictures into docs/img/:
+Trains one vvm, then follows the best-matching vop of every tick for the 10,000 test digits
+and draws pictures into docs/img/:
 
   walk-mnist.png   the walk as a graph: a column per tick, a box per vop in use at that
                    tick showing the average digit sent to it (less the average of all
                    digits), which digits those are, and lines for where its inputs go next
   vops-mnist.png   what each vop does to the answer: for the digits sent to it, how much
                    applying that vop alone moves the readout toward or away from each digit
+  digits-mnist.png the paths each digit takes: for every digit, its commonest whole paths,
+                   what share of that digit takes each, and the average of the digits on it
   program-mnist.png  the same walks with one box per vop, whatever the tick: an arrow from
                    a vop to the vop that ran after it, a loop where a vop ran twice running.
                    A vop is not a layer: the same vop can run early for one digit and late
@@ -67,7 +69,7 @@ def main():
     torch.manual_seed(0)
     model = VopVVM(784, 10, d=64, ticks=ticks, ops=ops, k=k)
     _, test, _ = train(model, data, 3000, 128, 3e-3, 0)
-    x, y = data[2][:5000], data[3][:5000]
+    x, y = data[2], data[3]  # all 10,000 test digits, about 1,000 of each
     model.eval()
     with torch.no_grad():
         steps = walk(model, x)
@@ -103,6 +105,7 @@ def main():
     draw_walk(nodes, tops, test, ops, k)
     draw_vops(nodes, ops)
     draw_program(tops, x, y, base, test, ops, k)
+    draw_digits(tops, x, y, test, ops, k)
 
 
 def draw_walk(nodes, tops, test, ops, k):
@@ -230,6 +233,58 @@ def draw_program(tops, x, y, base, test, ops, k):
               "not a layer, the same one can run early for one digit and late for another.",
               fontsize=8.5, color=MUTED)
     fig.savefig("docs/img/program-mnist.png", dpi=105)
+    plt.close(fig)
+
+
+def draw_digits(tops, x, y, test, ops, k, show=5):
+    """A row per digit: its commonest whole paths, the share of that digit on each, and the
+    average image of the examples that took it."""
+    ticks = tops.shape[1]
+    fig = plt.figure(figsize=(15, 13.5), facecolor="white")
+    back = fig.add_axes([0, 0, 1, 1])
+    back.set_axis_off()
+    back.set_xlim(0, 1)
+    back.set_ylim(0, 1)
+    print("the paths each digit takes")
+    for d in range(10):
+        m = y == d
+        n = int(m.sum())
+        paths = Counter(map(tuple, tops[m].tolist()))
+        cy = 0.9 - d * 0.086
+        ax = fig.add_axes([0.035, cy - 0.034, 0.05, 0.068])
+        ax.imshow(x[m].mean(dim=0).view(28, 28).numpy(), cmap="gray_r")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        common = paths.most_common(show)
+        covered = sum(c for _, c in common) / n
+        back.text(0.095, cy + 0.012, "digit %d" % d, fontsize=13, color=INK, weight="bold")
+        back.text(0.095, cy - 0.014, "%d examples\n%d different paths" % (n, len(paths)),
+                  fontsize=8.5, color=MUTED, va="top")
+        line = "  digit %d (%d): %d paths;" % (d, n, len(paths))
+        for j, (path, c) in enumerate(common):
+            cx = 0.215 + j * 0.146
+            on = m & (tops == torch.tensor(path)).all(dim=1)
+            ax = fig.add_axes([cx, cy - 0.034, 0.05, 0.068])
+            ax.imshow(x[on].mean(dim=0).view(28, 28).numpy(), cmap="gray_r")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            back.text(cx + 0.056, cy + 0.012, "%.0f%%" % (100 * c / n), fontsize=13,
+                      color="#2a78d6" if j == 0 else INK, weight="bold")
+            back.text(cx + 0.056, cy - 0.016, " > ".join(map(str, path)), fontsize=9.5,
+                      color=INK)
+            line += "  %s %.0f%%" % ("-".join(map(str, path)), 100 * c / n)
+        back.text(0.215 + show * 0.146 - 0.004, cy, "rest\n%.0f%%" % (100 * (1 - covered)),
+                  fontsize=9, color=MUTED, va="center")
+        print(line)
+    back.text(0.035, 0.972, "The paths each digit takes", fontsize=15, color=INK, weight="bold")
+    back.text(0.035, 0.95, "%d vops, %d fetched a tick, %d ticks, test %.3f. All 10,000 test "
+              "digits. A path is the best-matching vop of each tick, in order." %
+              (ops, k, ticks, test), fontsize=10, color=MUTED)
+    back.text(0.035, 0.022, "Left: the average of all test examples of the digit. Then its %d "
+              "commonest paths: the share of that digit's examples that took the path, the vops "
+              "in order, and the average of the examples that took it." % show, fontsize=9,
+              color=MUTED)
+    fig.savefig("docs/img/digits-mnist.png", dpi=105)
     plt.close(fig)
 
 
