@@ -150,4 +150,11 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     different vops to cope. With structured addresses it runs the same vops (97%) and its
     reads shift a quarter of the way with the digit, in the right direction and not down.
     A quarter is not following, and that machine scores lower than the random one.
+29. **Version 6 reaches the earlier versions' score once it reads more, sees its pointers and
+    is trained longer.** [hint: one seed, `python -m vvm2.core best`, 12,000 steps] Four
+    reads a tick and vops that see their pointers: 0.986. Eight reads: 0.989, reading 46 of
+    49 patches. Sixteen ticks instead of eight: 0.986, no gain. The earlier best was 0.986
+    (the flat-vop form). The cost is size on paper: 5.1 and 13.7 million weights, because
+    each vop's matrix grew with what it sees; but only 24 to 30 of the 256 vops ever run,
+    so about a tenth of those weights are in use.
 
