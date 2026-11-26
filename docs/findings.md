@@ -90,4 +90,21 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
     into scratch), 0.958 at two, 0.967 at four, 0.963 at eight; 1,131 of 2,048 vops in use
     at four ticks. Under the flat-vop version's 0.986, with vops that each see 32 numbers
     of memory, not all of it.
+20. **On this CPU a wide vop does more work a second than a small one.** [hint: one
+    unoptimised benchmark, one core of a Ryzen 9 9950X, floats, `scripts/benchtick.sh`] A
+    small vop (16 by 32, one store a tick) against a wide one (64 by 32: the store, the next
+    pc and both next addresses in one tick), fetched by a hash of the pc from a bank of a
+    given size, every tick a jump to another vop:
+
+    | bank | small vop, ns a tick | wide vop, ns a tick |
+    |---|---|---|
+    | 1 MB (in cache) | 66 | 113 |
+    | 64 MB | 193 | 337 |
+    | 2 GB | 286 | 529 |
+
+    A wide tick costs 1.6 to 1.85 small ticks and does the work of up to four of them
+    (a store and three pointer changes). The jump to the vop is most of the cost once the
+    bank is out of cache: the same arithmetic takes four times longer at 2 GB than at 1 MB.
+    Sixteen runs sharing the bank were no faster a tick, because the loop does not yet
+    fetch ahead. The absolute numbers are a floor for effort, not a ceiling for speed.
 
