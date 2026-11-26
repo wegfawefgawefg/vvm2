@@ -83,4 +83,11 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
     one tick (only the 32 fixed boot vops) ends at pixel error 0.0263 against 0.0163 with
     four ticks, and its digits are visibly worse (`docs/img/drawn-mnist-1tick.png` against
     `drawn-mnist.png`).
+19. **A vvm on a vector RAM works, and there the ticks are everything.** [hint: one seed,
+    `scripts/ram.sh`] Memory is slots of 16 numbers (49 image patches, 16 scratch, 1 output);
+    a vop is an instruction that reads two fixed slots and adds a vector to a third; 2,048
+    vops, 32 fetched a tick. MNIST: chance at one tick (the first tick only loads patches
+    into scratch), 0.958 at two, 0.967 at four, 0.963 at eight; 1,131 of 2,048 vops in use
+    at four ticks. Under the flat-vop version's 0.986, with vops that each see 32 numbers
+    of memory, not all of it.
 

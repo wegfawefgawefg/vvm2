@@ -142,4 +142,15 @@ Nothing below has been shown beyond that.
     "done" signal are read after every tick; "done" is trained to say whether the current
     answer is right. Care needed: an untrained "done" sits near one half, so the bar must
     be high or its start pushed low; and halting is not used during training, only read.
+44. **Fetch by a bar, not a fixed count** (owner: always exactly 32 is "jank"): run every vop
+    whose key matches the address above a bar, few or many as the moment needs, with a cap
+    for cost. Halting then needs no extra signal: when nothing matches, the vvm has stopped.
+    The boot set becomes whatever vops match an empty memory, not "the top 32".
+45. **One RAM, with vops as runs of slots** (owner: the vops and the scratchpad are the same
+    thing; "it becomes live to me when its writing to its own ops"): on the vector RAM a vop
+    is 33 slots of 16 numbers (its matrix column by column, and its bias). Put the bank in
+    the same RAM as scratch, let a vop's read and write slots fall anywhere, and a vop that
+    writes into another vop's slots is the vvm editing its own program. To find out: does it
+    learn not to trample itself when the RAM is big enough, or must program and data be
+    kept apart. Needs each run to have its own copy of the part it can write.
 
