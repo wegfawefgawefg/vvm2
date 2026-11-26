@@ -55,8 +55,13 @@ parameter count, once on compute per step. Both numbers are in every table.
     objectives: predict the next input, reconstruct what was stored. Report what each
     costs in memory and compute per step beside what it buys.
 
-Gate: most of the bank in use without hand-holding, and a clear win at equal compute on
-something past 0b.
+Gate: a clear win at equal compute on something past 0b, and the bank is not locked in.
+Using little of the bank is fine when the score is good: a small task should need a small
+part of it. Locked in means: the score is poor while entries sit unused; or the same few
+entries are picked whatever the input; or a harder or a new task does not draw on more of
+the bank. So the measurements are: entries used against task size (it should grow with
+the task and stop when the task is solved), how much the picked entries change with the
+input, and whether a second task recruits unused entries or overwrites the first's.
 
 ## Phase 1: measure access before building storage
 

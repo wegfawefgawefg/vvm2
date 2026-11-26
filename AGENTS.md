@@ -14,7 +14,10 @@ no private paths, names, hostnames or keys in anything tracked.
 - Write your predictions into the results doc and commit them before reading any scoring run.
 - Screen on 2 or 3 seeds and short runs first; spend more seeds only on what survives.
 - Report bank use on every run: share of entries ever used, entropy of use, the top
-  entry's share. A result from a collapsed bank is a result about a small model.
+  entry's share, and how much the picked entries change with the input. Using little of the
+  bank is fine when the score is good. The fault is being locked in: a poor score beside
+  unused entries, the same entries whatever the input, or no more of the bank drawn on
+  when the task grows or changes.
 - Look inside a win before calling it one: what does the machine do tick by tick.
 - A null stated cleanly is a good result. Say what you did not do.
 
