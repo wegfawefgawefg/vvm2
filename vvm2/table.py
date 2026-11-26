@@ -1,6 +1,7 @@
 """Print results tables (markdown) from the rows that vvm2.train wrote.
 
   python -m vvm2.table out/0b_assoc.jsonl --split items
+  python -m vvm2.table out/0b_assoc.jsonl --pivot items   test accuracy, one column a value
   python -m vvm2.table out/0d_chase.jsonl --groups        accuracy per test group (h)
   python -m vvm2.table out/0d_chase.jsonl --lens "machine T=4"   the look inside
 
@@ -45,7 +46,21 @@ def grouped(rows, split):
     out = defaultdict(lambda: defaultdict(list))
     for r in sorted(rows, key=lambda r: (r["model"] != "machine", r["label"], r["seed"])):
         out[r["args"].get(split) if split else None][r["label"]].append(r)
-    return dict(sorted(out.items(), key=lambda kv: str(kv[0])))
+    return dict(sorted(out.items(), key=lambda kv: (isinstance(kv[0], str), kv[0] or 0)))
+
+
+def pivot_table(rows, by):
+    """One line per label, test accuracy (mean over seeds) at each value of a setting."""
+    lines, values = defaultdict(dict), sorted({r["args"][by] for r in rows})
+    for value, labels in grouped(rows, by).items():
+        for label, rs in labels.items():
+            lines[label]["sizes"] = [short(mean([r["params"] for r in rs])),
+                                     short(mean([r["madds"] for r in rs]))]
+            lines[label][value] = f"{mean([r['test_acc'] for r in rs]):.3f}"
+    order = grouped(rows, "")[None]
+    print_table(["model", "params", "madds"] + [f"{by} = {v}" for v in values],
+                [[label] + lines[label]["sizes"] + [lines[label].get(v, "-") for v in values]
+                 for label in order])
 
 
 def print_table(header, lines):
@@ -124,10 +139,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("paths", nargs="+")
     p.add_argument("--split", default="", help="a setting; one table per value of it")
+    p.add_argument("--pivot", default="", help="a setting; test accuracy per value of it")
     p.add_argument("--groups", action="store_true", help="test accuracy per test group")
     p.add_argument("--heads", action="store_true", help="bank use per head")
     p.add_argument("--lens", default="", help="label of the machine rows to look inside")
     args = p.parse_args()
+    if args.pivot:
+        pivot_table(load(args.paths), args.pivot)
+        return
     for value, rows in grouped(load(args.paths), args.split).items():
         if args.split:
             print(f"**{args.split} = {value}**\n")
