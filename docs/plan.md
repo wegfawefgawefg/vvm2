@@ -1,5 +1,10 @@
 # Plan
 
+**To be re-based.** Written before vops were matrices. The core now works on the ordinary
+tasks (`scripts/classic.sh`); the full list of ideas, not yet ordered, is `docs/ideas.md`.
+The phases below still describe the order of attack, but their details assume the first
+build.
+
 In order. Each phase has a gate; a phase that fails its gate is written up and the plan is
 changed, not pushed through. Status is updated as things land.
 

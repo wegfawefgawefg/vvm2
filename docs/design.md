@@ -1,5 +1,11 @@
 # The vvm, version 0
 
+**Out of date.** This page describes the first build, in which an op was a vector added to
+the state. That was wrong. The vvm now is `vvm2/vop.py`: a vop is a small feed-forward
+layer (a matrix and a bias) applied to the state, fetched by a key; nothing else computes.
+Its header says exactly what one tick does. This page is kept until it is rewritten; the
+list of ideas is `docs/ideas.md`.
+
 Plain statement of what is built first. Everything here is a starting point to be measured,
 not a belief.
 
