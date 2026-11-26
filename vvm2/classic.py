@@ -157,7 +157,7 @@ def shifted(x, most, g):
     return img[torch.arange(n).view(n, 1, 1), rows, cols].reshape(n, 784)
 
 
-def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0):
+def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0, augment=None):
     """wd: weight decay (AdamW). shift: MNIST only, move each training image by up to this
     many pixels at random (the usual augmentation)."""
     x, y, tx, ty, kind = data
@@ -170,6 +170,8 @@ def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0):
         model.train()
         i = torch.randint(len(x), (min(batch, len(x)),), generator=g)
         xb = shifted(x[i], shift, g) if shift else x[i]
+        if augment is not None:
+            xb = augment(xb, g)
         out = model(xb)
         loss = F.cross_entropy(out, y[i]) if kind == "class" else F.mse_loss(out, y[i])
         opt.zero_grad()
