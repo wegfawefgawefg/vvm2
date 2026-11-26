@@ -122,7 +122,19 @@ def mnist(seed, folder="data/mnist"):
     return x, y, tx, ty, "class"
 
 
-TASKS = {"xor": xor, "sin": sin, "spirals": spirals, "mnist": mnist}
+def kmnist(seed):
+    """Kuzushiji-MNIST: ten handwritten Japanese characters, same format as MNIST
+    (scripts/get_data.sh kmnist)."""
+    return mnist(seed, "data/kmnist")
+
+
+def fashion(seed):
+    """Fashion-MNIST: ten kinds of clothing, shoes and bags (scripts/get_data.sh fashion)."""
+    return mnist(seed, "data/fashion")
+
+
+TASKS = {"xor": xor, "sin": sin, "spirals": spirals, "mnist": mnist, "kmnist": kmnist,
+         "fashion": fashion}
 
 
 def score(model, x, y, kind):

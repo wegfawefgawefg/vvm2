@@ -46,4 +46,19 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
 10. **Shifted training digits, not weight decay, are what make a vop's reads smooth.**
     [hint: one seed] Weight decay alone leaves them speckled (`docs/img/vops-small-wd.png`);
     with shifts they are clean strokes (`vops-small-trained.png`).
+11. **A small vop must add to the state, not replace it, or more ticks destroy it.** [likely:
+    2 seeds] Rank-2 vops, 64 in the bank: replacing the state, 0.960 at one tick and 0.931
+    at three; adding to it (`--apply res`), 0.967, 0.969 and 0.968 at one, three and six.
+12. **With the answer asked for at every tick, the second and third ticks help a little and
+    the rest do nothing.** [hint: one seed, `scripts/halt.sh`] Right if stopped at ticks 1
+    to 6: MNIST 0.975 0.980 0.981 0.981 0.981 0.981; Kuzushiji-MNIST 0.889 0.905 0.909
+    0.909 0.910 0.909. The walk does not spread over more vops with more ticks; it settles.
+13. **Halting works as a mechanism.** [hint: one seed] "Done" above 0.99: MNIST 0.980 right
+    at 2.3 ticks on average (43% of digits stop after one tick), Kuzushiji 0.909 at 3.9.
+    Above 0.9: MNIST 0.976 at 1.07 ticks, Kuzushiji 0.898 at 1.5. The digits it chooses to
+    run on are the hard ones (0.905 right against 0.979 for those stopped at once), and
+    classes differ in the ticks they need (Kuzushiji: 1.3 to 2.1).
+14. **First numbers off MNIST** [hint: one seed, no baseline run beside them yet]: 16 full
+    vops, 3 ticks, weight decay, shifted images: MNIST 0.985, Kuzushiji-MNIST 0.906,
+    Fashion-MNIST 0.874. Pictures of what each class's path uses: `docs/img/paths-*.png`.
 

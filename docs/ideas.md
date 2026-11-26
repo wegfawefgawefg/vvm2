@@ -125,4 +125,21 @@ Nothing below has been shown beyond that.
 39. **Why use is a plateau and a cliff, not Zipf** (`scripts/use.sh`): the vops in use have
     similar shares and the rest are dead. Does a varied, larger task give a long tail, and
     do noise or re-seeding bring dead vops in.
+40. **Devices by memory map** (owner): the vvm acts and senses through places in its own
+    address space that are wired to the world: a mouse, a keyboard, an eye or eyes, limbs.
+    Some registers are overwritten by the world every tick (sensors) and some are read by
+    the world every tick (actuators); the vvm has to discover what they do. Possibly also
+    arbitrary sockets for other kinds of input and output. No redesign per kind of input.
+41. **An eye it moves, for position and scale** (follows from 40): today an image is written
+    into the state through one flat map, so nothing learned at one place carries to another.
+    If the image is a device the vvm looks at through a small window it can move and zoom,
+    position and scale are handled by moving the eye, not by a special layer per format.
+42. **Flat vops as the normal vop** (owner's picture of a vop): one vector that reads the
+    state down to one number, and one that says where that number goes. A full 64 by 64 vop
+    is 64 of those bundled; the "small vops" in the findings are 2 bundled. With flat vops
+    the bank is a pool of single neurons and many are fetched per tick.
+43. **Halting** (owner asked; first version built, `scripts/halt.sh`): the answer and a
+    "done" signal are read after every tick; "done" is trained to say whether the current
+    answer is right. Care needed: an untrained "done" sits near one half, so the bar must
+    be high or its start pushed low; and halting is not used during training, only read.
 
