@@ -134,17 +134,31 @@ def score(model, x, y, kind):
     return F.mse_loss(out, y).item()
 
 
-def train(model, data, steps, batch, lr, seed):
+def shifted(x, most, g):
+    """Each 28 by 28 image moved by up to `most` pixels each way, at random."""
+    n = len(x)
+    img = F.pad(x.view(n, 28, 28), (most, most, most, most))
+    oy = torch.randint(2 * most + 1, (n, 1, 1), generator=g)
+    ox = torch.randint(2 * most + 1, (n, 1, 1), generator=g)
+    rows = oy + torch.arange(28).view(1, 28, 1)
+    cols = ox + torch.arange(28).view(1, 1, 28)
+    return img[torch.arange(n).view(n, 1, 1), rows, cols].reshape(n, 784)
+
+
+def train(model, data, steps, batch, lr, seed, wd=0.0, shift=0):
+    """wd: weight decay (AdamW). shift: MNIST only, move each training image by up to this
+    many pixels at random (the usual augmentation)."""
     x, y, tx, ty, kind = data
     torch.manual_seed(seed)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.0)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps)
     g = torch.Generator().manual_seed(seed)
     start = time.time()
     for _ in range(steps):
         model.train()
         i = torch.randint(len(x), (min(batch, len(x)),), generator=g)
-        out = model(x[i])
+        xb = shifted(x[i], shift, g) if shift else x[i]
+        out = model(xb)
         loss = F.cross_entropy(out, y[i]) if kind == "class" else F.mse_loss(out, y[i])
         opt.zero_grad()
         loss.backward()

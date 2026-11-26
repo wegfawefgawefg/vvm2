@@ -37,12 +37,14 @@ class VopBank(nn.Module):
             self.w = nn.Parameter(torch.randn(ops, d, d) / math.sqrt(d))
         self.b = nn.Parameter(torch.zeros(ops, d))
         self.register_buffer("picks", torch.zeros(ops))
+        self.register_buffer("blocked", torch.zeros(ops, dtype=torch.bool))  # for knock-outs
         self.last = None
 
     def forward(self, state):
         """state [B, d] -> the mixed output of the k fetched ops, [B, d]."""
         q = F.layer_norm(self.query(state), (self.d_key,))
-        sc, idx = (q @ self.keys.T).topk(self.k, dim=-1)          # [B, k]
+        scores = (q @ self.keys.T).masked_fill(self.blocked, float("-inf"))
+        sc, idx = scores.topk(self.k, dim=-1)                      # [B, k]
         w = torch.softmax(sc, dim=-1)
         if self.rank:
             mid = torch.einsum("bkrj,bj->bkr", self.v[idx], state)
@@ -115,6 +117,8 @@ def main():
     a("--k", type=int, default=2)
     a("--rank", type=int, default=0, help=">0: each op is a rank-r matrix")
     a("--apply", default="ff", choices=["ff", "res"])
+    a("--wd", type=float, default=0.0, help="weight decay")
+    a("--shift", type=int, default=0, help="mnist: move training images up to this many pixels")
     a("--threads", type=int, default=4)
     args = p.parse_args()
     torch.set_num_threads(args.threads)
@@ -144,7 +148,8 @@ def main():
                 best = min(range(2, 2049), key=lambda w: abs(
                     MLP(ins, outs, w).madds_total() - ref.madds_total()))
                 model = MLP(ins, outs, best)
-            tr, te, secs = train(model, data, args.steps, args.batch, args.lr, seed)
+            tr, te, secs = train(model, data, args.steps, args.batch, args.lr, seed,
+                                 wd=args.wd, shift=args.shift)
             u = use(model, data[2]) if name == "vvm" else None
             rows.append((params(model), model.madds_total(), tr, te, u, secs))
         mean = lambda j: sum(r[j] for r in rows) / len(rows)

@@ -1,6 +1,8 @@
 """One box per vop: what each vop looks at and what it does with it.
 
-  python -m vvm2.lookvops [OPS]        default 64; rank-2 vops, 2 fetched, 1 tick
+  python -m vvm2.lookvops [OPS STEPS WEIGHT_DECAY SHIFT NAME]
+      default 64 3000 0 0 vops-small; rank-2 vops, 2 fetched, 1 tick; the picture is
+      docs/img/NAME.png
 
 With small vops the bank has to share the work, so each vop is easy to read. A rank-2 vop
 reads the state along two directions and writes along two others. Drawn for every vop that
@@ -31,12 +33,13 @@ INK, MUTED = "#1a1a1a", "#555555"
 
 
 def main():
-    ops = int(sys.argv[1]) if len(sys.argv) > 1 else 64
+    arg = sys.argv[1:] + ["64", "3000", "0", "0", "vops-small"][len(sys.argv) - 1:]
+    ops, steps, wd, shift, name = int(arg[0]), int(arg[1]), float(arg[2]), int(arg[3]), arg[4]
     torch.set_num_threads(8)
     data = TASKS["mnist"](0)
     torch.manual_seed(0)
     model = VopVVM(784, 10, d=64, ticks=1, ops=ops, k=2, rank=2)
-    _, test, _ = train(model, data, 3000, 128, 3e-3, 0)
+    fit, test, _ = train(model, data, steps, 128, 3e-3, 0, wd=wd, shift=shift)
     x, y = data[2], data[3]
     b = model.bank
     model.eval()
@@ -59,8 +62,28 @@ def main():
                              for d, c in digits.most_common(3) if c / int(m.sum()) >= 0.12)
             rows.append((op, m.float().mean().item(), (x[m].mean(dim=0) - base).view(28, 28),
                          looks, push, names or "mixed"))
-    print("mnist, %d rank-2 vops, 2 fetched, 1 tick: test %.3f; %d vops drawn" %
-          (ops, test, len(rows)))
+    print("mnist, %d rank-2 vops, 2 fetched, 1 tick, %d steps, weight decay %g, shift %d: "
+          "train %.3f, test %.3f; %d vops drawn" % (ops, steps, wd, shift, fit, test, len(rows)))
+    # how unevenly the vops are used, and what the rarely used ones are worth
+    use = torch.bincount(got.flatten(), minlength=ops).float()
+    order = use.argsort(descending=True)
+    share = use[order] / use.sum()
+    print("  use, busiest first (%% of fetches): %s" % " ".join(
+        "%.1f" % (100 * v) for v in share[:24].tolist()))
+    print("  the busiest 4 take %.0f%% of fetches, the busiest 8 %.0f%%, the busiest 16 %.0f%%"
+          % (100 * share[:4].sum(), 100 * share[:8].sum(), 100 * share[:16].sum()))
+
+    def test_with(blocked):
+        b.blocked.zero_()
+        b.blocked[blocked] = True
+        with torch.no_grad():
+            acc = (model(x).argmax(dim=1) == y).float().mean().item()
+        b.blocked.zero_()
+        return acc
+
+    for keep in (2, 4, 8, 16):
+        print("  only the busiest %2d vops allowed: test %.3f" % (keep, test_with(order[keep:])))
+    print("  the busiest 4 knocked out: test %.3f" % test_with(order[:4]))
     for d in range(10):
         pairs = Counter(tuple(sorted(p)) for p in got[y == d].tolist())
         n = int((y == d).sum())
@@ -98,10 +121,11 @@ def main():
             ax.set_title("does: push on each digit", fontsize=9, color=MUTED)
     back.text(0.03, 0.965, "One box per vop: what it is fetched for, what it looks at, what it "
               "does", fontsize=14, color=INK, weight="bold", transform=fig.transFigure)
-    back.text(0.03, 0.94, "MNIST, %d rank-2 vops, 2 fetched, 1 tick, test %.3f. Every vop "
-              "fetched for at least 0.5%% of test digits, busiest first." % (ops, test),
+    back.text(0.03, 0.94, "MNIST, %d rank-2 vops, 2 fetched, 1 tick, %d steps, weight decay "
+              "%g, shift %d, test %.3f. Every vop fetched for at least 0.5%% of test digits, "
+              "busiest first." % (ops, steps, wd, shift, test),
               fontsize=10, color=MUTED, transform=fig.transFigure)
-    fig.savefig("docs/img/vops-small.png", dpi=105)
+    fig.savefig("docs/img/%s.png" % name, dpi=105)
     plt.close(fig)
 
 

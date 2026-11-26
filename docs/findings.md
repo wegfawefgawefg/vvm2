@@ -27,3 +27,15 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
 6. **A digit mostly takes one path, and the other paths are other handwriting.** [hint: one
    trained vvm] Share of a digit's examples on its commonest path: 91% for 0, 26% for 7;
    upright and slanted ones take different paths (`docs/img/digits-mnist.png`).
+7. **The rarely fetched vops are doing real work.** [likely: two trainings] Small-vop bank
+   of 64 (`scripts/lookvops.sh`): use is uneven but not a cliff (the busiest 4 take 32% to
+   40% of fetches, the busiest 16 81% to 94%). Allowing only the busiest 2 vops: 0.32 to
+   0.45; the busiest 4: 0.55 to 0.62; 8: 0.86 to 0.89; 16: 0.95; all: 0.956. Knocking out
+   the busiest 4: 0.77 to 0.80.
+8. **Ordinary practice matters and was missing.** [hint: one seed] 3,000 steps with no
+   weight decay left what the vops read looking like noise. 12,000 steps with weight decay
+   0.05 and training digits shifted up to 2 pixels: what each vop reads is a smooth stroke
+   or curve (`docs/img/vops-small-trained.png` against `vops-small.png`). Weight decay
+   alone lifts the test score to 0.963 (train 0.988); with the shifts it is 0.956 on both,
+   so that vvm is then short of capacity, not overfitted.
+
