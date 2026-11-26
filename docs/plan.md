@@ -1,0 +1,50 @@
+# Plan
+
+In order. Each phase has a gate; a phase that fails its gate is written up and the plan is
+changed, not pushed through. Status is updated as things land.
+
+## Phase 0: toys, in RAM, in PyTorch
+
+Every result is beside an MLP, a GRU and a small transformer, matched twice: once on
+parameter count, once on compute per step. Both numbers are in every table.
+
+0a. *(queued)* Foundation: the machine of `docs/design.md`, the three baselines, the
+    training harness with parameter and compute accounting, the bank-use measurements, and
+    the first tasks (0b to 0d) running end to end.
+0b. Stored associations: random key to value, N items. What it shows: capacity per entry
+    and per unit of compute. Expected to be the machine's best case.
+0c. Modular addition and parity. What it shows: retrieved edits can compute, not only store.
+0d. Pointer chasing: follow a learned map k times, one hop a tick. What it shows: the walk.
+0e. Bank collapse against the remedies in `docs/design.md`, cheapest first (noise in the
+    pick, in the query, in the state; then normalisation; then re-seeding).
+0f. Delayed copy and n-back, with and without the data memory. What it shows: the state's
+    bandwidth and whether the run-time store removes the limit.
+0g. Kuzushiji-MNIST, then a character-level language model on a small text.
+
+Gate: most of the bank in use without hand-holding, and a clear win at equal compute on
+something past 0b.
+
+## Phase 1: measure access before building storage
+
+On the trained models of phase 0: how skewed entry use is, how large the working set is
+over a window, the hit rate of a cache of a given size, and how well the next lookups can
+be predicted from the current state. This decides the cache and prefetch design.
+
+## Phase 2: the tiered store
+
+A C++ engine: values in a file, a hot cache in RAM, layout sorted by co-use, batched
+asynchronous reads; many workers walking one bank. Inference first, then training with
+sparse writes, on a bank deliberately larger than RAM. GPU for the dense part where it
+pays.
+
+## Phase 3: grow, shrink, keep learning
+
+Grow by splitting the busiest entries or seeding new ones near queries that matched
+poorly; shrink by dropping the least used and merging near-duplicates. Test: the same
+model at half and at double the bank. Then: learn a second task without losing the first;
+one store with a slow and a fast write path.
+
+## Phase 4: scale
+
+A byte-level language model with a bank of tens of gigabytes on NVMe, against the best
+dense model that fits the GPU.
