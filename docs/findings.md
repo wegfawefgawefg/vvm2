@@ -73,4 +73,14 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
     recognisable, varied digits from a class and a random code (`docs/img/drawn-mnist.png`).
     Trained as an autoencoder, with a small linear map outside the vvm making the code from
     the training image; a separate vvm from the classifier, same code and same tick.
+17. **Letting the input help choose the vops is far better at one tick and no better at
+    four.** [hint: one seed] Memory-mapped vvm, writing along a vector. Address from the
+    scratchpad only: MNIST 0.961 at one tick, 0.986 at four; Kuzushiji 0.789, 0.917.
+    Address from the input too: MNIST 0.982, 0.983; Kuzushiji 0.922, 0.925. With the input
+    in the address the first fetch already fits the image and later ticks add almost
+    nothing; with the scratchpad only, the ticks do the work.
+18. **In the painter the later ticks do real work.** [hint: one seed] The same painter with
+    one tick (only the 32 fixed boot vops) ends at pixel error 0.0263 against 0.0163 with
+    four ticks, and its digits are visibly worse (`docs/img/drawn-mnist-1tick.png` against
+    `drawn-mnist.png`).
 
