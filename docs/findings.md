@@ -108,3 +108,46 @@ numbers are test accuracy after 3,000 steps, 2 seeds, `scripts/classic.sh mnist 
     Sixteen runs sharing the bank were no faster a tick, because the loop does not yet
     fetch ahead. The absolute numbers are a floor for effort, not a ceiling for speed.
 
+## Version 6 (`vvm2/core.py`): one memory, pc and address slots, one write rule
+
+All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless said.
+
+21. **A machine that sees its input only through addresses it computes learns.** [likely]
+    0.937 to 0.950 as first built; 0.970 after 24,000 steps with nothing else changed. It
+    was undertrained, not broken.
+22. **It was starved of input.** [likely] As built it reads 18 of 49 patches, each read
+    spread over about 15 slots. Four reads a tick: 38 of 49 patches and 0.970 (from 0.939).
+23. **A vop must see the machine's own pc and addresses, and it is the information that
+    helps, not the size.** [likely: `python -m vvm2.statecheck size`] Plain 0.938; the same
+    with a bank made larger to the same weight count 0.942; vops shown another run's pc and
+    addresses 0.941; vops shown their own 0.952. It was always free to point a read at
+    those slots and did not learn to.
+24. **Asking for the answer at every tick, and more ticks, do nothing here.** [hint] 0.938
+    against 0.939; with four reads 0.969 against 0.970; 16 ticks 0.965.
+25. **Noise on the addresses hurts at every strength tried, on a timer or not.** [hint]
+    None 0.937; fading from 0.3, 0.6, 1.0: 0.913, 0.903, 0.886; constant 0.3: 0.765. It
+    reads fewer patches with noise, not more.
+26. **Sharp pointers cannot be forced.** [hint] Structured addresses, trained on moved
+    digits: soft pointers 0.874; reading only the 3 nearest slots 0.587; only the nearest
+    one, chance. A hard cut gives the gradient nothing to follow.
+27. **Moved digits** (every digit moved one patch; `python -m vvm2.shifttest`). [hint] Trained
+    in place and tested moved, everything collapses (an MLP 0.277, version 6 0.18 to 0.19).
+    Trained on moved digits: an MLP of the same size 0.980; version 6 0.851, 0.902 once its
+    vops see their pointers; with structured addresses 0.767 and 0.874. Version 6 is well
+    behind a plain net here.
+28. **The first sign of a shared routine: with structured addresses and a view of its
+    pointers, the same program runs on a moved digit and the reads begin to follow it.**
+    [hint: one seed, `python -m vvm2.statecheck step`] Each test digit run in place and
+    again one patch to the right, compared tick by tick:
+
+    | addresses | sees its pointers | same vop on a tick | read centre moved right, patches | right, moved |
+    |---|---|---|---|---|
+    | random | no | 0.63 | 0.00 | 0.812 |
+    | random | yes | 0.66 | +0.04 | 0.896 |
+    | structured | yes | 0.97 | +0.24 | 0.845 |
+
+    With random addresses the machine reads the same places wherever the digit is and runs
+    different vops to cope. With structured addresses it runs the same vops (97%) and its
+    reads shift a quarter of the way with the digit, in the right direction and not down.
+    A quarter is not following, and that machine scores lower than the random one.
+

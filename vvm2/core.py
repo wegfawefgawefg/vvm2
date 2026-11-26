@@ -4,6 +4,7 @@
   python -m vvm2.core checks        what is holding the score down: one change at a time
   python -m vvm2.core explore       is it an exploration problem: more steps, address noise
   python -m vvm2.core anneal        address noise on a curriculum: strong first, fading out
+  python -m vvm2.core best          the changes that helped, together, trained longer
 
 Memory is one list of slots, 16 numbers each. Every slot has an address: a fixed vector of
 16 numbers, part of the machine. The slots:
@@ -139,7 +140,10 @@ class Core(nn.Module):
             if self.see_pc:
                 got = torch.cat([got, mem[:, 0]], dim=1)
             if self.see_head:
-                got = torch.cat([got, mem[:, :head].flatten(1)], dim=1)
+                mine = mem[:, :head]
+                if self.see_head == "other":   # a control: another run's pointers, same size
+                    mine = torch.roll(mine, 1, dims=0)
+                got = torch.cat([got, mine.flatten(1)], dim=1)
             out = F.hardtanh(torch.einsum("bkij,bj->bki", self.m[idx], got) + self.bias[idx])
             out = torch.einsum("bk,bki->bi", mix, out).view(n, 1 + head, SLOT)   # execute
             w = aim[:, -1]
@@ -193,7 +197,7 @@ HEAD = ("| what | ticks | params | madds | train | test | vops run | patches rea
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else "mnist"
     torch.set_num_threads(8)
-    if arg not in ("checks", "explore", "anneal"):
+    if arg not in ("checks", "explore", "anneal", "best"):
         data = TASKS[arg](0)
         print("%s, the vector virtual machine v6, 256 vops, 4 blended a tick; 6,000 steps" % arg)
         print(HEAD, flush=True)
@@ -216,6 +220,19 @@ def main():
             torch.manual_seed(0)
             model = Core(**{"ticks": 8, **kw})
             fit, test, _ = train(model, data, steps, 128, 3e-3, 0, wd=0.05, shift=2)
+            report(label, model, data, fit, test)
+        return
+    if arg == "best":
+        data = TASKS["mnist"](0)
+        print("mnist, version 6 at 8 ticks: the changes that helped, together; 12,000 steps")
+        print(HEAD, flush=True)
+        for label, kw in [("4 reads, sees its pointers", {"reads": 4, "see_head": True}),
+                          ("8 reads, sees its pointers", {"reads": 8, "see_head": True}),
+                          ("4 reads, sees its pointers, 16 ticks",
+                           {"reads": 4, "see_head": True, "ticks": 16})]:
+            torch.manual_seed(0)
+            model = Core(**{"ticks": 8, **kw})
+            fit, test, _ = train(model, data, 12000, 128, 3e-3, 0, wd=0.05, shift=2)
             report(label, model, data, fit, test)
         return
     if arg == "anneal":
