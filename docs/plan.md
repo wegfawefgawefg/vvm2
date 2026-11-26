@@ -48,3 +48,25 @@ one store with a slow and a fast write path.
 
 A byte-level language model with a bank of tens of gigabytes on NVMe, against the best
 dense model that fits the GPU.
+
+## Todo, not scheduled
+
+- **Credit past the backprop window, without a global pass.** Backprop through n steps
+  only teaches the machine to keep something for at most n steps. Ways to reach further,
+  to try once sequences work at all:
+  1. Credit along lookups, not along ticks: when a read at step t+1000 finds something
+     written at step t, send the gradient straight from the read to the write and skip the
+     steps between (sparse attentive backtracking, Ke et al. 2018; temporal value
+     transport, Hung et al. 2019). The natural fit here, since the data memory already
+     records who read what.
+  2. A trace kept with each entry: how much that entry has pushed the current state,
+     carried forward and decayed, so a later error can still reach it (eligibility traces,
+     e-prop; the sparse forward-mode family, SnAp, Menick et al. 2020, which gets cheap
+     exactly when few entries are touched per step).
+  3. A learned guess of the future's gradient at the window's edge, trained by
+     bootstrapping from the next window, so credit creeps back a window per pass
+     (synthetic gradients, Jaderberg et al. 2016).
+  4. A usefulness score kept with each entry or stored item, bootstrapped the same way
+     (as a value function is), deciding what is kept and what is overwritten.
+  5. Side objectives that make the machine keep things with no long gradient at all:
+     predict the next input, reconstruct what was stored.
