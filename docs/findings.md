@@ -397,4 +397,24 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     (bench/tick.cpp). Four threads a job is four times slower than one (209 ms a step
     against 817 with the CPU busy): the tensors are small. Applying each fetched vop once
     to the whole batch halved a training step at batch 64 and does not help larger batches.
+48. **A one-line cellular automaton is learned as a loop that is exact at 8 times the
+    trained width, on 2 seeds of 3, when half the training batches are run with whole
+    steps.** [hint: `scripts/automata.sh`, docs/results-2026-11-27-automata.md] Rule 110 on
+    a ring, trained on widths 6 to 12, a bank of 128; cells right / whole rows right, whole
+    steps.
+
+    | | width 12 | 24 | 48 | 96 |
+    |---|---|---|---|---|
+    | vvm, seeds 0 and 2 | 1.000 / 1.00 | 1.000 / 1.00 | 1.000 / 1.00 | 1.000 / 1.00 |
+    | vvm, seed 1 | 0.987 / 0.93 | 0.949 / 0.72 | 0.864 / 0.40 | 0.756 / 0.15 |
+    | a convolutional net, 276 weights | 1.000 / 1.00 | 1.000 / 1.00 | 1.000 / 1.00 | 1.000 / 1.00 |
+    | GRU, same weights | 1.000 / 1.00 | 1.000 / 1.00 | 0.999 / 0.99 | 0.999 / 0.96 |
+
+    One read pointer walks the ring a cell a tick, the write pointer one cell behind, and
+    the two cells already passed are carried in the pc; it uses 5 to 7 of the 128 vops.
+    Rule 184 is exact too (one seed). Trained the usual way the same task is 1.000 as
+    trained and 0.76 with whole steps. Not learned: rules 30 and 90; the rule applied
+    twice; the rule given as a table; Conway's game (it answers "dead" everywhere), all in
+    short runs. A GRU does nearly as well here, so this task shows the machine learning a
+    loop, not the machine beating a GRU.
 

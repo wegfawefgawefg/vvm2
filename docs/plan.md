@@ -17,8 +17,9 @@ a plain net beside it, tested beyond what it trained on, run with whole steps, w
 - *(done as far as it goes)* Images through pointers that move on a grid and zoom (finding
   44): shapes carry to unseen sizes and places as trained, by blurred pointers; whole steps
   fail. Not run: drawing shapes, generating clothes and bags, a compute-matched baseline.
-- *(running)* Cellular automata: one-line rules, then Conway's, learned on small boards and
-  run on larger ones.
+- *(done as far as it goes)* Cellular automata (finding 48): rules 110 and 184 on a ring as
+  an exact loop; rules 30 and 90, two steps, a rule table and Conway's game not learned in
+  short runs.
 - *(done as far as it goes)* Algorithms and conditionals (findings 41 to 43): plain loops
   carry; a pointer that must wait or turn by what it reads is not learned. Written and not
   scored: compare, adding with a carry, brackets, sort.
