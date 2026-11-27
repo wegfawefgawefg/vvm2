@@ -97,6 +97,7 @@ class Core(nn.Module):
         self.trace, self.exact = None, None
         self.hard = False   # running, not training: every pointer takes its likeliest step
                             # whole, so pointers are single slots and stay so at any length
+        self.one = False    # a switch under test: no blend of vops; exactly one runs a tick
         self.draw = False   # a switch under test: pointers are exact in training too. While
                             # learning, each pointer takes one move drawn by its shares and
                             # the gradient passes straight through; when running it takes
@@ -152,6 +153,9 @@ class Core(nn.Module):
             pc = F.layer_norm(mem[:, 0], (SLOT,))
             sc, idx = (pc @ self.keys.T).topk(self.k, dim=-1)                 # fetch
             mix = torch.softmax(sc, dim=-1)
+            if self.one:    # exactly one vop runs: drawn by nearness while learning (the
+                mix = choose(mix, self.training, self.training)   # gradient straight
+                                                                  # through), the nearest when running
             got = torch.cat([torch.einsum("bps,bsd->bpd", at, mem).flatten(1), mem[:, 0]], dim=1)
             # execute. Runs in a batch mostly fetch the same few vops, so each vop that
             # anyone fetched is applied once to the whole batch (one plain matmul) and every
@@ -166,13 +170,18 @@ class Core(nn.Module):
             moves = out[..., 2 * SLOT:2 * SLOT + ptrs * self.steps]
             want = torch.softmax(moves.reshape(n, self.k, ptrs, self.steps), dim=-1)
             look = torch.einsum("bk,bki->bi", mix, out[..., 2 * SLOT + ptrs * self.steps:])
+            # with exact pointers a pointer can sit on a slot that is exactly empty; an
+            # empty slot then matches nothing (and its gradient stays finite)
+            tiny = 1e-2 if self.draw else 1e-12
             look = F.normalize(look.view(n, ptrs, SLOT), dim=-1)
-            like = look @ F.normalize(mem, dim=-1).transpose(1, 2)            # [B, P, slots]
-            like = self.seek_sharp * like - 30.0 * at                        # not where it is
+            shape = F.normalize(mem, dim=-1, eps=tiny).transpose(1, 2)
+            like = look @ shape                                               # [B, P, slots]
+            here = at.detach() if learn else at     # a mask, not a signal: with exact
+            like = self.seek_sharp * like - 30.0 * here   # pointers its gradient compounds
             like = like.masked_fill(place == 0, float("-inf"))               # nor the pc slot
             found = torch.softmax(like, dim=-1)
-            mine = F.normalize(torch.einsum("bps,bsd->bpd", at, mem), dim=-1)
-            twin = self.seek_sharp * (mine @ F.normalize(mem, dim=-1).transpose(1, 2)) - 30.0 * at
+            mine = F.normalize(torch.einsum("bps,bsd->bpd", at, mem), dim=-1, eps=tiny)
+            twin = self.seek_sharp * (mine @ shape) - 30.0 * here
             twin = torch.softmax(twin.masked_fill(place == 0, float("-inf")), dim=-1)
             step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, steps]
             if whole:
