@@ -8,6 +8,9 @@
             reads=2      read pointers (reads=1 with layout=each: it must step to see both)
             gain=1       sine only: the answer is `gain` times the output slot's first number
             seeds=3      how many seeds (0, 1, ...)
+            mix=1        train on the run with whole steps too: every training step adds
+                         the loss of the same batch run with whole steps (the gradient
+                         then reaches the values and the fetch, not the pointer moves)
             trace=0      skip the tick-by-tick trace
   python -m vvm2.curves --quick                           every task, 200 steps, one seed
 
@@ -29,6 +32,7 @@ import sys
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .common import TASKS, mlp_matched, params, score, train
 from .core import SLOT, Core
@@ -66,6 +70,20 @@ class CurveVM(nn.Module):
         c = self.core
         fan_in = (c.reads + 2) * SLOT
         return self.ticks * (c.ops * SLOT + c.k * c.fan_out * fan_in)
+
+
+def mixed_loss(kind):
+    """The loss as trained plus the loss of the same batch run with whole steps."""
+    def loss(vm, x, y):
+        fn = F.cross_entropy if kind == "class" else F.mse_loss
+        soft = fn(vm(x), y)
+        vm.eval()
+        vm.core.hard = True
+        hard = fn(vm(x), y)
+        vm.core.hard = False
+        vm.train()
+        return soft + hard
+    return loss
 
 
 def place(i, n_in, scratch):
@@ -135,8 +153,8 @@ def fmt(kind, v):
 
 
 def run(task, steps, layout="one", ticks=4, ops=16, k=4, reads=2, gain=1.0, seeds=3,
-        batch=64, lr=2e-3, trace=True):
-    torch.set_num_threads(4)
+        batch=64, lr=2e-3, trace=True, mix=False):
+    torch.set_num_threads(1)
     rows = {}
     kind = None
     for seed in range(seeds):
@@ -145,7 +163,8 @@ def run(task, steps, layout="one", ticks=4, ops=16, k=4, reads=2, gain=1.0, seed
         d, outs = x.shape[1], 2 if kind == "class" else 1
         torch.manual_seed(seed)
         vm = CurveVM(kind, layout, ticks, gain, ops=ops, k=min(k, ops), reads=reads, scratch=4)
-        tr, te, _ = train(vm, data, steps, batch, lr, seed)
+        tr, te, _ = train(vm, data, steps, batch, lr, seed,
+                          loss_fn=mixed_loss(kind) if mix else None)
         rows.setdefault("vvm, as trained", (params(vm), vm.madds(), []))[2].append((tr, te))
         vm.core.hard = True
         hard = (score(vm, x, y, kind), score(vm, tx, ty, kind))
@@ -167,9 +186,10 @@ def run(task, steps, layout="one", ticks=4, ops=16, k=4, reads=2, gain=1.0, seed
         if trace and seed == 0:
             show_trace(vm, *probes(task, tx))
     what = "share right" if kind == "class" else "mean squared error"
-    print("%s, layout '%s', %d ticks, bank of %d (k %d), %d read pointers, %d steps, %d seed%s. "
-          "%s, mean of seeds (each seed)" % (task, layout, ticks, ops, min(k, ops), reads, steps,
-                                             seeds, "" if seeds == 1 else "s", what))
+    print("%s, layout '%s', %d ticks, bank of %d (k %d), %d read pointers, %d steps%s, %d seed%s. "
+          "%s, mean of seeds (each seed)" % (
+              task, layout, ticks, ops, min(k, ops), reads, steps,
+              ", trained on whole steps too" if mix else "", seeds, "" if seeds == 1 else "s", what))
     print("| model | weights | multiply-adds | train | test |")
     print("|---|---|---|---|---|")
     for name, (weights, madds, scores) in rows.items():
@@ -193,4 +213,4 @@ if __name__ == "__main__":
             ops=int(extra.get("ops", 16)), k=int(extra.get("k", 4)),
             reads=int(extra.get("reads", 2)), gain=float(extra.get("gain", 1)),
             seeds=1 if quick else int(extra.get("seeds", 3)),
-            trace=extra.get("trace", "1") == "1")
+            trace=extra.get("trace", "1") == "1", mix=extra.get("mix", "0") == "1")

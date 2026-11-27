@@ -268,24 +268,32 @@ def look(policy, make_env, seed, show=24):
     print("    scratch: the largest number ever in it %.3f (0: never written). The pc slot: "
           "length %.2f, moves %.3f a world step" % (
               torch.stack([s[3] for s in seen])[live].max(), pcs.norm(dim=-1)[live].mean(), drift))
-    obs = torch.stack([s[0] for s in seen])[live]
+    obs = torch.stack([s[0] for s in seen])                          # [steps, 16, n_obs]
     took = torch.stack(acts)[live]
-    with torch.no_grad():
-        fresh = env.greedy(core(lay(obs, policy.layout), 8 + policy.ticks, 1)[-1][:, 0, :2])
-    if took.dtype == torch.bool:
-        print("    reflex test: a machine started fresh and shown only the present state for "
-              "%d ticks pushes the same way on %.3f of %d steps (right on %.2f of them)"
-              % (8 + policy.ticks, (fresh == took).float().mean(), len(took), took.float().mean()))
-    else:
-        print("    reflex test: a machine started fresh and shown only the present state for "
-              "%d ticks gives a torque %.3f away on average (range 4), over %d steps"
-              % (8 + policy.ticks, (fresh - took).abs().mean(), len(took)))
+    step = torch.arange(len(obs))[:, None].expand(live.shape)[live]
+    which = torch.arange(live.shape[1])[None, :].expand(live.shape)[live]
+    cells = []
+    for back in (1, 2, 4, 8, 32):
+        past = [obs[(step - b).clamp_min(0), which] for b in range(back - 1, -1, -1)]
+
+        def world(t):       # the oldest state held 8 ticks, then the real ones in order
+            return lay(past[min(max(t - 8, 0) // policy.ticks, back - 1)], policy.layout)
+
+        with torch.no_grad():
+            fresh = env.greedy(core(world, 8 + back * policy.ticks, 1)[-1][:, 0, :2])
+        cells.append("%d: %.3f" % (back, (fresh == took).float().mean() if took.dtype == torch.bool
+                                   else (fresh - took).abs().mean()))
+    print("    reflex test: a machine started fresh and shown only the last few states of the "
+          "episode (the oldest held for 8 ticks first). %s, over %d steps. States shown: %s"
+          % ("Share of steps on which it pushes the same way as the running machine did"
+             if took.dtype == torch.bool else "Mean distance of its torque from the running "
+             "machine's (the range is 4)", len(took), ", ".join(cells)))
     sys.stdout.flush()
 
 
 def run(world, rounds, who="vvm,mlp,gru", train="es", seed=0, layout="one", ticks=1, ops=4, k=2,
         reads=2, scratch=4, pop=32, eps=4, sigma=0.05, alpha=1.0, batch=16, lr=3e-3, trace=True):
-    torch.set_num_threads(4)
+    torch.set_num_threads(1)
     kind = Pendulum if world == "swing" else CartPole
     def make_env(n, g):
         return kind(n, g, hide=world == "blind")
