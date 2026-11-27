@@ -1,7 +1,8 @@
 """The lights game (Simon) around the core.
 
     python -m vvm2.simon [STEPS] [hold=1 lag=1 max=6 colours=4 scratch=64 ops=128 seed=0
-                                  gru=1 threads=1 mix=0 loop=0]
+                                  gru=1 threads=1 mix=0 loop=0
+                                  before=0]
 
 The world owns two input slots and reads one output slot:
 
@@ -18,6 +19,8 @@ pointers needs a lag of at least 1.
 
 loop=1 starts every vop with a silent next-pc, so the pc stays where it is and the same
 vops run again until one learns to jump: looping is the default and jumping is learned.
+before=2000 has the same machine learn to copy lists for that many steps first, then the
+lights game; copy is scored before and after, to see what is kept.
 mix=1 trains on two runs of every batch, one as usual and one with whole steps, and adds
 the two losses.
 
@@ -81,6 +84,27 @@ class SimonGRU(nn.Module):
         return self.out(y[:, reads])
 
 
+def copy_logits(vm, x):
+    """Another task on the same machine: copy a list from the input slots to the output
+    slots (as vvm2/tape.py does), with the colours as the symbols."""
+    outs = vm.core(vm.book[x], 2 * x.shape[1] + 4, x.shape[1])
+    return outs[-1] @ vm.book[:vm.colours].T * vm.temp
+
+
+def copy_score(vm, colours, when):
+    g, cells = torch.Generator().manual_seed(11), []
+    vm.eval()
+    vm.core.hard = True
+    with torch.no_grad():
+        for length in (8, 24, 48):
+            x = torch.randint(colours, (200, length), generator=g)
+            hit = copy_logits(vm, x).argmax(dim=-1) == x
+            cells.append("%.2f / %.2f" % (hit.float().mean(), hit.all(dim=1).float().mean()))
+    vm.core.hard = False
+    print("    copy with whole steps %s, lengths 8, 24, 48: %s" % (when, " | ".join(cells)),
+          flush=True)
+
+
 def show_trace(vm, x, hard):
     """Run 0 of a batch, tick by tick: the vop that ran (the best match), where each pointer
     is after the tick and the move that took it there. i0 is the light, i1 the signal, s3
@@ -126,7 +150,7 @@ def score(model, tests, g, colours):
 
 
 def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=0, gru=True,
-        threads=1, mix=False, loop=False):
+        threads=1, mix=False, loop=False, before=0):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
     vm = SimonVM(colours, hold, lag, scratch=scratch, ops=ops, k=min(4, ops))
@@ -145,6 +169,20 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=
               + (". Vops start out leaving the pc alone" if loop else "")))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
+    if before:   # the same machine learns to copy lists first (lengths 2 to 8)
+        opt = torch.optim.AdamW(vm.parameters(), lr=2e-3, weight_decay=0.01)
+        sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=before)
+        g = torch.Generator().manual_seed(seed + 1)
+        for _ in range(before):
+            vm.train()
+            x = torch.randint(colours, (64, int(torch.randint(2, 9, (1,), generator=g))), generator=g)
+            loss = F.cross_entropy(copy_logits(vm, x).reshape(-1, colours), x.reshape(-1))
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(vm.parameters(), 1.0)
+            opt.step()
+            sched.step()
+        copy_score(vm, colours, "after %d steps of copy" % before)
     models = [("vvm", vm)] + ([("gru", make(sized(make, params(vm))))] if gru else [])
     for name, model in models:
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
@@ -180,6 +218,8 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=
             print("| vvm, run with whole steps | %d | %s |" % (
                 params(vm), score(vm, tests, g, colours)), flush=True)
             vm.core.hard = False
+    if before:
+        copy_score(vm, colours, "after the lights game")
     x = torch.randint(colours, (8, min(4, most)), generator=torch.Generator().manual_seed(1))
     show_trace(vm, x, hard=False)
     show_trace(vm, x, hard=True)
@@ -191,4 +231,5 @@ if __name__ == "__main__":
     run(steps=int(first[0]) if first else 8000, hold=int(a.get("hold", 1)),
         lag=int(a.get("lag", 1)), most=int(a.get("max", 6)), colours=int(a.get("colours", 4)),
         scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 128)), seed=int(a.get("seed", 0)),
-        gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1")
+        gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1",
+        before=int(a.get("before", 0)))

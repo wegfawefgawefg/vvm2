@@ -22,11 +22,10 @@ is pushed right when the first is the larger (the pendulum's torque is twice the
 difference). The machine is started once an episode and runs to the end of it; nothing is
 wiped between world steps, so the pc slot, the scratch slots and the pointers carry over.
 
-What the core lacks for this, and the way round it. `Core.forward` calls `world(t)` for the
-input but does not hand it the output slots, and a control loop needs them to make the next
-state. Nor can the world end a run early. The core is frozen, so `machine_memory` reads the
-core's memory out of the running `forward` (its Python frame) and `Stop` is raised to end a
-run when every episode is over. The machine itself is untouched and unhelped.
+The loop is closed through the core's own interface: `world(t, out)` is handed the output
+slot as it stands and returns the next state, or None to end the run when every episode is
+over. (`machine_memory` reads the whole memory out of the running core, for the look
+inside only.)
 
 Training. Evolution strategy: each round, `pop` copies of the weights with noise added
 (mirrored pairs, noise `sigma`), each scored on the same `eps` fresh episodes; the weights
@@ -49,10 +48,6 @@ from .curves import MOVES, lay, place
 from .worlds import CartPole, Pendulum
 
 
-class Stop(Exception):
-    """Raised by the world to end the machine's run: every episode is over."""
-
-
 def machine_memory():
     """The running core's memory [B, slots, 16], read from the frame of Core.forward (which
     called the world function, which called this). Read only."""
@@ -69,21 +64,18 @@ class VMPolicy(nn.Module):
     def rollout(self, env, pick, stop=True, watch=None):
         """One batch of episodes, the machine running throughout. pick: output numbers ->
         action. watch: called with the memory at every world step."""
-        def world(t):
+        def world(t, out):   # the core hands over the output slot; None ends the run
             if t and t % self.ticks == 0:
-                mem = machine_memory()
                 if watch is not None:
-                    watch(mem)
-                env.step(pick(mem[:, -1, :2]))
+                    watch(machine_memory())
+                env.step(pick(out[:, 0, :2]))
                 if stop and env.over():
-                    raise Stop
+                    return None
             return lay(env.obs(), self.layout)
 
-        try:
-            outs = self.core(world, self.ticks * env.cap, 1, trace=watch is not None)
+        outs = self.core(world, self.ticks * env.cap, 1, trace=watch is not None)
+        if len(outs) == self.ticks * env.cap:
             env.step(pick(outs[-1][:, 0, :2]))
-        except Stop:
-            pass
 
     def madds(self):
         c = self.core

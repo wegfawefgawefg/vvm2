@@ -23,10 +23,8 @@ a plain net beside it, tested beyond what it trained on, run with whole steps, w
 - *(running)* Algorithms and conditionals: adding with a carry, counting, parity, sorting,
   matching brackets, keeping only some items; the lights game at long holds, with and
   without a clock device.
-- *(done)* Ordinary curves and a pole (findings 38, 39). To fix: the world cannot see the
-  output slots while the machine runs (`world(t)` is not handed them), so the pole task
-  reaches into the running core; the core should hand them over. Not yet run: the pole
-  with velocities hidden, swing-up.
+- *(done)* Ordinary curves and a pole (findings 38, 39). Not yet run: the pole with
+  velocities hidden, swing-up.
 - *(next, after the image device is in)* Cats against dogs, then all ten classes of a
   small colour data set (CIFAR-10): a colour patch a slot, coarse and fine levels. Then look
   inside: for each vop, what is under the pointer when it runs, and where it sends the

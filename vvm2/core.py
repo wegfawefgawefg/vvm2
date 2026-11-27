@@ -45,6 +45,7 @@ There is no state outside memory and the pointers, no input map and no readout. 
 chooses what runs. The earlier form, with address vectors matched by nearness, is
 old/core6b.py; finding 32 is why it was replaced.
 """
+import inspect
 import math
 
 import torch
@@ -89,13 +90,17 @@ class Core(nn.Module):
 
     def forward(self, world, ticks, n_out, trace=False, go=None):
         """Run for `ticks` ticks.
-        world     [B, n_in, 16], the input slots for the whole run; or a function of the
-                  tick number that returns them, for input that changes while it runs
+        world     [B, n_in, 16], the input slots for the whole run; or a function that
+                  returns them tick by tick, for input that changes while it runs:
+                  world(t), or world(t, out) to be handed the output slots as they stand
+                  (None before the first tick), so the world can answer what the machine
+                  does. If it returns None the run ends there.
         n_out     how many output slots the world wants
         go        the device's steps: a whole-number table [moves, n_in]; go[m, i] is the
                   input slot that step m leads to from input slot i. Left out: a line.
         Returns the output region after every tick: [ticks, B, n_out, 16]."""
-        first = world(0) if callable(world) else world
+        hands = callable(world) and len(inspect.signature(world).parameters) > 1
+        first = (world(0, None) if hands else world(0)) if callable(world) else world
         n, n_in = len(first), first.shape[1]
         slots = 1 + n_in + self.scratch + n_out
         ends = [1, n_in, 1 + n_in, n_in + self.scratch, 1 + n_in + self.scratch, slots - 1]
@@ -124,7 +129,10 @@ class Core(nn.Module):
         outs, log, exact = [], [], []
         for t in range(ticks):
             if callable(world) and t > 0:                 # the world rewrites its slots
-                mem = torch.cat([mem[:, :1], world(t), mem[:, 1 + n_in:]], dim=1)
+                now = world(t, mem[:, slots - n_out:]) if hands else world(t)
+                if now is None:
+                    break
+                mem = torch.cat([mem[:, :1], now, mem[:, 1 + n_in:]], dim=1)
             pc = F.layer_norm(mem[:, 0], (SLOT,))
             sc, idx = (pc @ self.keys.T).topk(self.k, dim=-1)                 # fetch
             mix = torch.softmax(sc, dim=-1)
