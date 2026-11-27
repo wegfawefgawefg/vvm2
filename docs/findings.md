@@ -464,4 +464,17 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     does arithmetic on an address. Scoring by squared error misled the search (anything
     imperfect in an output slot scored worse than an empty one, so it wrote nothing);
     scoring by likeness of direction does not.
+52. **With a vop carrying its own load, store and next addresses, one core runs a whole
+    program, and evolution builds chains of vops, though not yet a loop.** [hint: one to
+    three seeds, `scripts/evolve.sh hand`, `build/copy evolve 30000 512 SEED copy pass 1`]
+    A vop is an op slot and the slot after it, whose first three numbers are where to load,
+    where to store and which vop is next; a core is only a pc. By hand, one core and two
+    vops copy a list of any length: a copy vop, and a vop that adds a fixed amount to the
+    copy vop's addresses, taking turns. Evolution with one core, lists of 1 to 8: one seed
+    of two gets every item of every list right at length 8, by a chain of eight vops each
+    copying one fixed item and pointing at the next (0.56 at length 16, so no loop). On
+    lists of 1 to 24, too long to give every item a vop, three seeds get 0.42, 0.67 and
+    0.52 of items at length 24: longer chains, still no vop that changes another's
+    addresses. Before this change a core's addresses lived in its own slot and a single core
+    could not run a program at all: once it stored data its addresses never changed again.
 

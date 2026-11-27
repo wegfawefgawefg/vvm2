@@ -3,9 +3,10 @@
 //
 //   cpp/copy hand            the hand-written program, scored at several lengths
 //   cpp/copy speed           ticks a second
-//   cpp/copy evolve [GENS] [POP] [SEED] [TASK] [START]
+//   cpp/copy evolve [GENS] [POP] [SEED] [TASK] [START] [CORES]
 //       TASK   copy (lists of 1 to 8) | one | two | four (lists of exactly that many) |
 //              negate (one item, its negative wanted) | reverse (lists of 1 to 8, backwards)
+//              long (lists of 1 to 24: more items than there is room for vops)
 //       START  random (every slot random) | pass (every program slot starts as an op that
 //              passes a slot through nearly unchanged; the cores' addresses are random)
 //
@@ -13,7 +14,7 @@
 //                      32..79  input (the world's)     80..127  output      with the cores)
 // A list of L items sits in the first L input slots, one item a slot; an item is one of 8
 // fixed random grids (the world's code book). The answer for item i is whichever code book
-// grid output slot i is nearest. The machine runs for L + 4 ticks.
+// grid output slot i is nearest. The machine runs for 2 L + 4 ticks. One core runs unless said.
 #include <omp.h>
 
 #include <algorithm>
@@ -26,7 +27,7 @@
 
 static const int N = 128, CORES = 4, OWN = 32, IN0 = 32, OUT0 = 80, CAP = 48, SYMBOLS = 8;
 static float BOOK[SYMBOLS][SLOT];
-static int LMIN = 1, LMAX = 8, SIGN = 1;
+static int LMIN = 1, LMAX = 8, SIGN = 1, RUNNING = 1;   // RUNNING: how many of the 4 cores tick
 static bool BACKWARDS = false;
 
 typedef std::vector<float> Genome;   // slots 0..31: the cores, the program, the scratch
@@ -35,7 +36,8 @@ static void set_up(Machine& m, const Genome& g, const int* list, int len) {
     m.n = N;
     m.mem.assign((size_t)N * SLOT, 0.0f);
     std::memcpy(m.mem.data(), g.data(), (size_t)OWN * SLOT * sizeof(float));
-    m.cores = {0, 1, 2, 3};
+    m.cores.assign({0, 1, 2, 3});
+    m.cores.resize((size_t)RUNNING);
     m.world_lo = IN0, m.world_hi = IN0 + CAP;
     for (int i = 0; i < len; i++) std::memcpy(m.slot(IN0 + i), BOOK[list[i]], SLOT * sizeof(float));
 }
@@ -48,7 +50,7 @@ static void set_up(Machine& m, const Genome& g, const int* list, int len) {
 // nothing.)
 static float run(Machine& m, const Genome& g, const int* list, int len, int* right) {
     set_up(m, g, list, len);
-    for (int t = 0; t < len + 4; t++) m.tick();
+    for (int t = 0; t < 2 * len + 4; t++) m.tick();
     float err = 0.0f;
     for (int i = 0; i < len; i++) {
         const float* out = m.slot(OUT0 + i);
@@ -74,17 +76,18 @@ static Genome by_hand() {
     Genome g((size_t)OWN * SLOT, 0.0f);
     auto at = [&](int slot, int row, int col) -> float& { return g[(size_t)slot * SLOT + row * SIDE + col]; };
     const float step = address_of(1, N);
-    // core 0 does the copying: op = slot 4 (pass the value through), load the first input
-    // slot, store to the first output slot. Its second row holds the amount to move by.
-    at(0, 0, 0) = address_of(4, N), at(0, 0, 1) = address_of(IN0, N), at(0, 0, 2) = address_of(OUT0, N);
-    at(0, 1, 1) = step, at(0, 1, 2) = step;
-    // core 1 moves core 0's addresses on: op = slot 5, load core 0's slot, store it back
-    at(1, 0, 0) = address_of(5, N), at(1, 0, 1) = address_of(0, N), at(1, 0, 2) = address_of(0, N);
-    // cores 2 and 3 have nothing to do: they pass scratch slot 10 to scratch slot 11
-    for (int c = 2; c < 4; c++)
-        at(c, 0, 0) = address_of(4, N), at(c, 0, 1) = address_of(10, N), at(c, 0, 2) = address_of(11, N);
-    for (int i = 0; i < SIDE; i++) at(4, i, i) = 1.0f, at(5, i, i) = 1.0f;   // slot 4: pass through
-    at(5, 0, 1) = 1.0f;   // slot 5: the same, and add the second row to the first
+    at(0, 0, 0) = address_of(4, N);                     // the one core starts on the vop at slot 4
+    // the copy vop: slot 4 passes a slot through; slot 5 has its addresses (load the first
+    // input slot, store to the first output slot, then go to the vop at slot 6) and, in its
+    // second row, the amount to move by
+    for (int i = 0; i < SIDE; i++) at(4, i, i) = 1.0f;
+    at(5, 0, 0) = address_of(IN0, N), at(5, 0, 1) = address_of(OUT0, N), at(5, 0, 2) = address_of(6, N);
+    at(5, 1, 0) = step, at(5, 1, 1) = step;
+    // the bump vop: slot 6 adds the second row of what it loads to the first; slot 7 has its
+    // addresses (load slot 5, store back to slot 5, then go to the vop at slot 4)
+    for (int i = 0; i < SIDE; i++) at(6, i, i) = 1.0f;
+    at(6, 0, 1) = 1.0f;
+    at(7, 0, 0) = address_of(5, N), at(7, 0, 1) = address_of(5, N), at(7, 0, 2) = address_of(4, N);
     return g;
 }
 
@@ -113,6 +116,7 @@ int main(int argc, char** argv) {
     if (what == "hand") { report(by_hand(), "the program written by hand", 1); return 0; }
 
     if (what == "speed") {
+        RUNNING = 4;
         Machine m;
         int list[CAP];
         for (int i = 0; i < CAP; i++) list[i] = i % SYMBOLS;
@@ -133,27 +137,29 @@ int main(int argc, char** argv) {
     const int gens = argc > 2 ? std::atoi(argv[2]) : 2000, pop = argc > 3 ? std::atoi(argv[3]) : 512;
     const unsigned seed = argc > 4 ? (unsigned)std::atoi(argv[4]) : 0;
     const std::string task = argc > 5 ? argv[5] : "copy", start = argc > 6 ? argv[6] : "random";
+    if (argc > 7) RUNNING = std::atoi(argv[7]);
     if (task == "one") LMIN = LMAX = 1;
     if (task == "two") LMIN = LMAX = 2;
     if (task == "four") LMIN = LMAX = 4;
     if (task == "negate") LMIN = LMAX = 1, SIGN = -1;
     if (task == "reverse") BACKWARDS = true;
+    if (task == "long") LMAX = 24;        // lists of 1 to 24: more items than vops fit
     const int keep = pop / 4, lists = 16;
     std::mt19937 rng(seed);
     std::vector<Genome> people((size_t)pop, Genome((size_t)OWN * SLOT));
     for (auto& g : people) {
         std::uniform_real_distribution<float> w(-0.5f, 0.5f), a(0.0f, 1.0f);
         for (auto& x : g) x = w(rng);
-        if (start == "pass")
-            for (int sl = CORES; sl < OWN; sl++)
+        if (start == "pass")      // even slots: ops that pass a slot through; odd: addresses
+            for (int sl = CORES; sl < OWN; sl += 2)
                 for (int q = 0; q < SLOT; q++) g[(size_t)sl * SLOT + q] = (q / SIDE == q % SIDE ? 1.0f : 0.0f) + 0.1f * w(rng);
-        for (int c = 0; c < CORES; c++) for (int k = 0; k < 3; k++) g[(size_t)c * SLOT + k] = a(rng);
+        for (int sl = 0; sl < OWN; sl++)
+            if (sl < CORES || sl % 2) for (int k = 0; k < 3; k++) g[(size_t)sl * SLOT + k] = a(rng);
     }
     std::vector<float> score((size_t)pop);
     std::vector<int> order((size_t)pop);
     std::printf("evolving %s (start: %s): %d individuals, %d generations, seed %u; lists of %d to %d "
-                "items; each individual is %d numbers\n", task.c_str(), start.c_str(), pop, gens, seed,
-                LMIN, LMAX, OWN * SLOT);
+                "items; %d cores running\n", task.c_str(), start.c_str(), pop, gens, seed, LMIN, LMAX, RUNNING);
     for (int gen = 0; gen <= gens; gen++) {
         int batch[16][CAP], lens[16];
         for (int k = 0; k < lists; k++) {
@@ -201,7 +207,7 @@ int main(int argc, char** argv) {
                     const int from = (int)(rng() % OWN);
                     std::copy(child.begin() + from * SLOT, child.begin() + (from + 1) * SLOT, slot);
                 } else if (kind <= 3) {                 // change one number
-                    float& x = slot[rng() % (s < CORES && rng() % 2 ? 3 : SLOT)];
+                    float& x = slot[rng() % (rng() % 2 ? 3 : SLOT)];
                     x = std::min(1.0f, std::max(-1.0f, x + size * bell(rng)));
                 } else {                                // change every number a little
                     for (int q = 0; q < SLOT; q++) slot[q] = std::min(1.0f, std::max(-1.0f, slot[q] + size * bell(rng)));
