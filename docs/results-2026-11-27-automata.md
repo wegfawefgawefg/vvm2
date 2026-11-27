@@ -80,3 +80,12 @@ programs step only one or two read pointers and carry the other cells in the pc.
 - Without whole-step batches on the same ring layout (the control): 1.00 as trained at
   width 12, under 0.99 with whole steps (65% sure).
 - Items 2, 3, 4: as first predicted, now at 3,000 steps or fewer.
+
+## Fourth predictions (before a second seed of rules 90 and 30)
+
+Seen: seed 0 of rule 90 not learned (0.61), of rule 30 right as trained and 0.75 with whole
+steps, of rule 184 exact; the control without whole-step batches 0.76 with whole steps.
+
+- Rule 90, seed 1: not learned again, under 0.75 of cells at width 12 as trained (60% sure).
+- Rule 30, seed 1: 0.99 or more as trained at width 12; not exact with whole steps at width
+  96 (55% sure).

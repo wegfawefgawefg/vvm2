@@ -7,6 +7,7 @@
   options after STEPS:  rule=110  the one-line rule         k=1      apply the rule k times
                         edge=wall or ring                   reads=3  read pointers (2 or 3)
                         ops=128   the size of the bank      seed=0   base=0  skip the nets
+                                  (base=2: skip only the large GRU)
                         tpc=2     ticks an output slot      sizes=12,24,48,96  test sizes
                         whole=0.5 the share of training batches run with whole steps
 
@@ -330,7 +331,7 @@ def rule_pools(seed=3, held=64):
 
 
 def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=None,
-        base=True, sizes=None, boards=300, whole=0.0):
+        base=1, sizes=None, boards=300, whole=0.0):
     torch.set_num_threads(1)     # one thread a job: quicker than four when the CPU is shared
     torch.manual_seed(seed)
     seen, held = rule_pools()
@@ -355,10 +356,11 @@ def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=N
     vm = AutoVM(ops=ops, k=min(4, ops), reads=reads, moves=len(big.steps),
                 scratch=big.scratch or 32)
     models = [("vvm, %d read pointers" % reads, vm)]
-    if base:
+    if base:        # base=2: without the large GRU, which is slow to train on one thread
         models += [("local net", Local(big.shape, k)),
-                   ("gru, the vvm's multiply-adds", TagGRU(gru_width(vm.madds(big), lambda m: m.madds(big)))),
-                   ("gru, the vvm's weights", TagGRU(gru_width(params(vm), params)))]
+                   ("gru, the vvm's multiply-adds", TagGRU(gru_width(vm.madds(big), lambda m: m.madds(big))))]
+    if base == 1:
+        models += [("gru, the vvm's weights", TagGRU(gru_width(params(vm), params)))]
     what = {"line": "rule %d applied %d time%s, edge %s" % (rule, k, "" if k == 1 else "s", edge),
             "rules": "the rule given as a table; tested on %d rules never trained on" % len(held),
             "life": "Conway's game"}[task]
@@ -408,4 +410,4 @@ if __name__ == "__main__":
         reads=int(extra.get("reads", 3)), ops=int(extra.get("ops", 128)),
         rule=int(extra.get("rule", 110)), k=int(extra.get("k", 1)),
         edge=extra.get("edge", "wall"), tpc=int(extra["tpc"]) if "tpc" in extra else None,
-        base=extra.get("base", "1") == "1", sizes=sizes, whole=float(extra.get("whole", 0)))
+        base=int(extra.get("base", 1)), sizes=sizes, whole=float(extra.get("whole", 0)))
