@@ -223,4 +223,21 @@ Nothing below has been shown beyond that.
     with its neighbours. If machines that exchange the most are kept next to each other
     (sorted by what they deal with, as the bank was meant to be sorted on disk), reaching
     by content turns into reaching a neighbour by position, which is the cheap kind.
+66. **Evolution inside one machine, not across many** (owner): the bank is the population
+    and vops are the individuals. Each vop keeps a running score of how things went on the
+    ticks it was fetched; now and then a vop that does well is copied, with small changes,
+    over one that does badly or is never fetched. The machine keeps running and is never
+    reset. The hard part: which vop gets the credit for a result many ticks later.
+67. **An evolved machine that says how to change the weights** (owner: "a machine that
+    predicts gradients that's evolved"): evolution searches only for a small rule, and the
+    rule does the bulk learning, so the search stays small however big the bank is. With
+    vops in the same memory and writable, the rule is itself a few vops whose job is to
+    rewrite other vops. Related work to read first: synthetic gradients, learned
+    optimizers, evolved Hebbian rules.
+68. **Predicting its own next state** (owner). Three different things under that name:
+    (a) predict what the world will write next, a signal at every tick with no labels;
+    (b) predict its own next memory, which collapses unless guarded (the easy way to be
+    predictable is to do nothing); (c) distil a routine: a new vop, keyed by the state a
+    loop starts in, trained to write in one tick what the loop takes many to reach, so a
+    slow routine becomes a fast one.
 
