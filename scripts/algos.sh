@@ -5,7 +5,6 @@
 #   scripts/algos.sh TASK [STEPS] [options]     one run; tasks and options: vvm2/algos.py
 #   scripts/algos.sh seeds TASK STEPS [options] seeds 0, 1 and 2, one after another
 #   scripts/algos.sh --quick                    every task for 30 steps, to check it all runs
-# The lights game with long holds and a clock is in vvm2/tape.py: scripts/tape.sh simon ...
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -x .venv/bin/python ] || scripts/setup.sh
@@ -15,7 +14,6 @@ if [ "${1:-}" = "--quick" ]; then
                 cond condflash; do
         nice -n 19 .venv/bin/python -m vvm2.algos "$task" 30 tests=8,16 threads=4
     done
-    nice -n 19 .venv/bin/python -m vvm2.tape simon 30 hold=4 clock=1 threads=4
     exit
 fi
 if [ "${1:-}" = "seeds" ]; then

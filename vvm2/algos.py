@@ -27,6 +27,7 @@ on much longer ones, to find where the machine stops.
             threads=4                               twin=1   the seek-my-twin step
             boot=1    start the read pointers on the first input slot and the write pointer
                       on the first output slot (only where they start; still learned)
+            seek=0    hold the moves by content off (tape.no_seek)
             lo=2 hi=8 the trained lengths           tests=8,16,32,64
 
 An item is one of 12 fixed vectors of 16 numbers (the world's code book: ten symbols and two
@@ -49,12 +50,13 @@ import torch.nn.functional as F
 
 from .common import params
 from .core import SLOT, Core
-from .tape import codebook
+from .tape import codebook, no_seek
 
 SYMBOLS = 8
 MARK, MARK2, DARK = 10, 11, 12          # two marks, and a slot with nothing in it
 NAMES = "0123456789MR_"
 BAR = 0.4                               # an output slot less like every answer than this is empty
+MOVES = ["  .", "  >", "  <", "in0", "inN", "sc0", "scN", "ou0", "ouN", "seek", "twin"]
 
 
 def default_ticks(n_in, n_out):
@@ -304,6 +306,8 @@ def show_trace(vm, task, length, g, label):
             who = "write:  " if p == core.reads else "read %d: " % (p + 1)
             print("      " + who + " ".join(
                 "%3s" % place(int(t[1][b, p].argmax()), tokens.shape[1], core.scratch) for t in log))
+            if core.hard:               # the move that took it there
+                print("        did:  " + " ".join("%3s" % MOVES[int(t[2][b, p].argmax())] for t in log))
     sys.stdout.flush()
     return runs
 
@@ -332,12 +336,14 @@ def train(model, task, steps, lengths, seed):
 
 
 def run(name, steps, ops=128, k=4, seed=0, gru=True, threads=4, twin=False, boot=False,
-        lo=2, hi=8, tests=(8, 16, 32, 64)):
+        lo=2, hi=8, tests=(8, 16, 32, 64), seek=True):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
     task = TASKS[name]
     lengths = [n for n in range(lo, hi + 1) if not (task.even and n % 2)]
     vm = AlgoVM(ops=ops, k=min(k, ops), seek_self=twin)
+    if not seek:
+        no_seek(vm.core)
     if boot:
         with torch.no_grad():
             vm.core.boot_at[:-1, 0] = 3.0
@@ -352,9 +358,10 @@ def run(name, steps, ops=128, k=4, seed=0, gru=True, threads=4, twin=False, boot
         models += [("gru, same weights", AlgoGRU(same, classes)),
                    ("gru, same arithmetic a step", AlgoGRU(small, classes))]
     print("%s: trained on lengths %d to %d, %d steps, seed %d, a bank of %d vops, %d fetched "
-          "a tick%s%s. In each cell: share of items right / share of whole answers right" % (
+          "a tick%s%s%s. In each cell: share of items right / share of whole answers right" % (
               name, lo, hi, steps, seed, ops, vm.core.k,
               ", with the seek-my-twin step" if twin else "",
+              "" if seek else ", moves by content held off",
               ", pointers started on the first input and output slots" if boot else ""))
     print("| model | weights | multiply-adds a tick | " +
           " | ".join("length %d" % t for t in tests) + " |")
@@ -386,5 +393,5 @@ if __name__ == "__main__":
         ops=int(extra.get("ops", 128)), k=int(extra.get("k", 4)), seed=int(extra.get("seed", 0)),
         gru=extra.get("gru", "1") == "1", threads=int(extra.get("threads", 4)),
         twin=extra.get("twin", "0") == "1", boot=extra.get("boot", "0") == "1",
-        lo=int(extra.get("lo", 2)), hi=int(extra.get("hi", 8)),
+        lo=int(extra.get("lo", 2)), hi=int(extra.get("hi", 8)), seek=extra.get("seek", "1") == "1",
         tests=tuple(int(t) for t in extra.get("tests", "8,16,32,64").split(",")))
