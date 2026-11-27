@@ -417,4 +417,17 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     twice; the rule given as a table; Conway's game (it answers "dead" everywhere), all in
     short runs. A GRU does nearly as well here, so this task shows the machine learning a
     loop, not the machine beating a GRU.
+49. **With the move by content and the jumps to region ends taken out, copy and reverse are
+    still exact at 12 times the trained length; exact pointers in training are not
+    reliable.** [hint: one seed a row, `python -m old.tape8 copy 3000`, bank of 32, 85,827
+    weights; a vop is 41 by 64] Scored with whole steps at lengths 8 to 96.
+
+    | task | soft pointers in training | pointers exact in training |
+    |---|---|---|
+    | copy | every list right at every length | 0.13 of items (chance) |
+    | reverse | every list right at every length | every list right at every length |
+    | the lights game, 6 lights | 0.97 / 0.84 with the whole-step run in the loss; 0.37 at 12 lights | 0.25 (chance) |
+
+    Exact pointers in training: two clean successes and three outright failures across
+    findings 46 and 49. Not a method to lean on yet.
 
