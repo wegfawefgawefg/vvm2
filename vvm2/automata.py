@@ -8,6 +8,7 @@
                         edge=wall or ring                   reads=3  read pointers (2 or 3)
                         ops=128   the size of the bank      seed=0   base=0  skip the nets
                         tpc=2     ticks an output slot      sizes=12,24,48,96  test sizes
+                        whole=0.5 the share of training batches run with whole steps
 
 A cell is dead or live. Each state, and each mark below, is a fixed vector of 16 numbers
 from the world's code book; the machine never learns the book. The answer in an output slot
@@ -19,8 +20,8 @@ line, edge=wall (the default): edges are fixed zero. The input region is a left 
   along a line and stop at its ends. Only the cells are scored.
 line, edge=ring: edges wrap. The input region is the row alone, and the device's steps make
   it a ring (the step on from the last cell leads to the first). The output region is a
-  line with one spare slot after the row, which the world does not read: a write pointer
-  that has finished has somewhere harmless to stand.
+  line with one spare slot at each end of the row, which the world does not read: a write
+  pointer that has finished, either way, has somewhere harmless to stand.
 line, k=2 or more: the answer is the row after k applications. Scratch is as long as the
   row plus four, and the machine gets k times the ticks.
 rules: the row with marks, then the rule's table as 8 pairs of slots (a key for one of the
@@ -89,9 +90,9 @@ def line_world(n, width, g, rule=110, k=1, ring=False, tpc=2):
         y = line_step(y, table, ring)
     if ring:
         place = torch.arange(width)
-        w = SimpleNamespace(tokens=x, want=F.pad(y, (0, 1)), src=F.pad(place, (0, 1)),
+        w = SimpleNamespace(tokens=x, want=F.pad(y, (1, 1)), src=F.pad(place, (1, 1)),
                             go=torch.stack([place.roll(-1), place.roll(1)]),
-                            scored=F.pad(torch.ones(width), (0, 1)).bool())
+                            scored=F.pad(torch.ones(width), (1, 1)).bool())
         w.trained = w.scored
     else:
         w = SimpleNamespace(tokens=marked(x), want=marked(y), src=torch.arange(width + 2),
@@ -230,19 +231,30 @@ def gru_width(target, cost):
     return min(range(4, 600, 4), key=lambda width: abs(cost(TagGRU(width)) - target))
 
 
-def fit(model, make, steps, seed, batch=64):
+def fit(model, make, steps, seed, batch=64, say=0, whole=0.0):
+    """say: print the loss to stderr every so many steps. whole: the share of training
+    batches on which the machine runs with whole steps (every pointer takes its likeliest
+    move outright; the gradient then reaches what is stored and the pc, not the moves)."""
+    coin = torch.Generator().manual_seed(seed + 77)
     opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
     g = torch.Generator().manual_seed(seed)
-    for _ in range(steps):
+    for step in range(steps):
         model.train()
+        if whole and torch.rand((), generator=coin) < whole:
+            model.eval()
+            model.core.hard = True
         w = make(batch, None, g)
         loss = F.cross_entropy(model(w)[:, w.trained].flatten(0, 1), w.want[:, w.trained].flatten())
+        if say and step % say == say - 1:
+            print("  step %d: loss %.3f" % (step + 1, loss), file=sys.stderr, flush=True)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         sched.step()
+        if whole:
+            model.core.hard = False
     model.eval()
 
 
@@ -318,7 +330,7 @@ def rule_pools(seed=3, held=64):
 
 
 def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=None,
-        base=True, sizes=None, boards=300):
+        base=True, sizes=None, boards=300, whole=0.0):
     torch.set_num_threads(4)
     torch.manual_seed(seed)
     seen, held = rule_pools()
@@ -351,8 +363,9 @@ def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=N
             "rules": "the rule given as a table; tested on %d rules never trained on" % len(held),
             "life": "Conway's game"}[task]
     print("%s: %s. Trained on sizes %d to %d, %d steps, seed %d, a bank of %d vops, %d ticks "
-          "an output slot. In each cell: share of cells right / share of whole boards right"
-          % (task, what, short[0], short[1], steps, seed, ops, tpc))
+          "an output slot%s. In each cell: share of cells right / share of whole boards right"
+          % (task, what, short[0], short[1], steps, seed, ops, tpc,
+             ", %.2f of training batches run with whole steps" % whole if whole else ""))
     with torch.no_grad():
         dead = " | ".join("%.3f" % (w.want[:, w.scored] == DEAD).float().mean()
                           for w in (make(boards, size, g) for size in tests))
@@ -361,7 +374,7 @@ def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=N
     print("|---|---|---|" + "---|" * len(tests))
     print("| answering dead everywhere | 0 | 0 | %s |" % dead, flush=True)
     for name, model in models:
-        fit(model, make, steps, seed)
+        fit(model, make, steps, seed, *((64, 500, whole) if model is vm else ()))
         size = "%d | %d" % (params(model), model.madds(big))
         print("| %s | %s | %s |" % (name, size, cells(model, make, tests, g, boards)), flush=True)
         if model is vm:
@@ -395,4 +408,4 @@ if __name__ == "__main__":
         reads=int(extra.get("reads", 3)), ops=int(extra.get("ops", 128)),
         rule=int(extra.get("rule", 110)), k=int(extra.get("k", 1)),
         edge=extra.get("edge", "wall"), tpc=int(extra["tpc"]) if "tpc" in extra else None,
-        base=extra.get("base", "1") == "1", sizes=sizes)
+        base=extra.get("base", "1") == "1", sizes=sizes, whole=float(extra.get("whole", 0)))

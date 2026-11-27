@@ -45,3 +45,24 @@ above is a different number of slots away on a larger board.
 **5. The trace.** Where item 1 is learned with 3 pointers: one to three ticks of setting
 up, then one vop on every tick with every pointer taking the step "next", and the picked
 vop the same whatever the row (under 0.05 of ticks differ between rows).
+
+## Second predictions (written after the first four screens, before the next runs)
+
+Seen so far, one seed each, rule 110: at 1,500 steps and 2 ticks a slot neither 2 nor 3
+pointers learn anything that survives whole steps (0.77 and 0.81 of cells as trained, 0.37
+and 0.41 with whole steps, where answering dead everywhere is 0.37). At 4,000 steps and 1
+tick a slot with 3 pointers: marks at the edges 0.997 as trained at width 12 and 0.41 with
+whole steps; the ring 1.000 as trained and 0.94 to 0.98 with whole steps at every width.
+So the trained machine leans on blended pointers, which read a blur of neighbouring cells.
+
+Two changes follow, both outside the core. The ring's output line gets a spare slot at each
+end (the seed-0 ring program wrote back to front and ended parked on a cell it had
+answered). And `whole=0.5`: half the training batches are run with whole steps, so the
+loss also sees the machine as it will be run; the gradient on those batches reaches what is
+stored and the pc but not the pointer moves.
+
+- Ring, whole=0.5, 4,000 steps, 1 tick a slot: with whole steps 0.99 or more of cells at
+  every width (50% sure).
+- Marks at the edges, whole=0.5: with whole steps better than 0.41 and under 0.90 (55%
+  sure): the pointer paths it finds there are not near a loop, and whole-step batches
+  cannot move pointers.
