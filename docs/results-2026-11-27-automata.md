@@ -66,3 +66,17 @@ stored and the pc but not the pointer moves.
 - Marks at the edges, whole=0.5: with whole steps better than 0.41 and under 0.90 (55%
   sure): the pointer paths it finds there are not near a loop, and whole-step batches
   cannot move pointers.
+
+## Third predictions (after the three-seed ring runs, before the runs on other rules)
+
+Seen: ring, whole=0.5, 3,000 steps (cut from 4,000 to save time), 3 pointers: seeds 0 and 2
+exact at every width with whole steps, seed 1 not (0.99 falling to 0.76). The two exact
+programs step only one or two read pointers and carry the other cells in the pc.
+
+- 2 read pointers, same recipe, seed 0: learned, exact with whole steps at every width (60%
+  sure), since the 3-pointer programs did not use the third pointer.
+- Rules 30, 90, 184, same recipe, seed 0: at least two of the three exact with whole steps
+  at every width (55% sure).
+- Without whole-step batches on the same ring layout (the control): 1.00 as trained at
+  width 12, under 0.99 with whole steps (65% sure).
+- Items 2, 3, 4: as first predicted, now at 3,000 steps or fewer.
