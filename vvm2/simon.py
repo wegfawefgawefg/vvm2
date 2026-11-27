@@ -23,6 +23,7 @@ before=2000 has the same machine learn to copy lists for that many steps first, 
 lights game; copy is scored before and after, to see what is kept.
 draw=1 keeps the pointers exact while training as well: each pointer takes one move drawn
 by its shares, the gradient passing straight through (the switch `draw` in vvm2/core.py).
+draw=2 is the same with the likeliest move taken, nothing drawn.
 one=1 runs exactly one vop a tick, with no blend: drawn by nearness to the pc while
 learning, the nearest when running (the switch `one` in vvm2/core.py).
 grow=1 is a curriculum of data: games of 1 to 2 lights at first, the longest game growing
@@ -160,7 +161,7 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=32, seed=0
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
     vm = SimonVM(colours, hold, lag, scratch=scratch, ops=ops, k=min(4, ops))
-    vm.core.draw, vm.core.one = draw, one
+    vm.core.draw, vm.core.one, vm.core.sample = bool(draw), one, draw != 2
     if loop:   # every vop starts out leaving the pc alone, so the same vops come round
         with torch.no_grad():   # again until one learns to jump: a loop is the default
             vm.core.m[:, SLOT:2 * SLOT] = 0
@@ -175,7 +176,8 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=32, seed=0
               steps, seed, (". Trained on the run with whole steps too" if mix else "")
               + (". Vops start out leaving the pc alone" if loop else "")
               + (". The longest game grows from 2" if grow else "")
-              + (". Pointers exact in training too, moves drawn" if draw else "")
+              + (". Pointers exact in training too, moves %s" % (
+                  "drawn" if draw == 1 else "the likeliest") if draw else "")
               + (". One vop a tick, no blend" if one else "")))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
@@ -244,4 +246,4 @@ if __name__ == "__main__":
         scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 32)), seed=int(a.get("seed", 0)),
         gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1",
         before=int(a.get("before", 0)), grow=a.get("grow", "0") == "1",
-        draw=a.get("draw", "0") == "1", one=a.get("one", "0") == "1")
+        draw=int(a.get("draw", 0)), one=a.get("one", "0") == "1")

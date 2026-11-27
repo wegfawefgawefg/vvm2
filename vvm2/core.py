@@ -98,6 +98,8 @@ class Core(nn.Module):
         self.hard = False   # running, not training: every pointer takes its likeliest step
                             # whole, so pointers are single slots and stay so at any length
         self.one = False    # a switch under test: no blend of vops; exactly one runs a tick
+        self.sample = True  # with draw: the move is drawn by its shares (True) or is the
+                            # likeliest one (False); either way the gradient passes through
         self.draw = False   # a switch under test: pointers are exact in training too. While
                             # learning, each pointer takes one move drawn by its shares and
                             # the gradient passes straight through; when running it takes
@@ -141,7 +143,7 @@ class Core(nn.Module):
         learn = self.draw and self.training
         whole = self.draw or (self.hard and not self.training)
         if whole:
-            start = choose(start, learn, learn)
+            start = choose(start, learn and self.sample, learn)
         at = start @ anchors                                                 # [B, P, slots]
         outs, log, exact = [], [], []
         for t in range(ticks):
@@ -185,7 +187,7 @@ class Core(nn.Module):
             twin = torch.softmax(twin.masked_fill(place == 0, float("-inf")), dim=-1)
             step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, steps]
             if whole:
-                step = choose(step, learn, learn)
+                step = choose(step, learn and self.sample, learn)
                 found = choose(found, False, learn)
                 twin = choose(twin, False, learn)
             write = at[:, -1]
