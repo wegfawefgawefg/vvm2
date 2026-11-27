@@ -305,4 +305,34 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     four lights and cannot grow. The earlier form of the task with one tick a light was
     also unfair: it wanted the first answer on the tick the machine first saw "play",
     before a pointer could move; `vvm2/simon.py` gives one tick of reaction time.
+41. **A ladder of small algorithms: the machine carries a plain loop and stops where a
+    pointer must wait or turn by what it reads.** [hint: one seed a row but shift,
+    `scripts/algos.sh`, docs/results-2026-11-27-algorithms.md] Trained on lengths 2 to 8, a
+    bank of 128; share of whole answers right.
+
+    | task | length 8, as trained | length 64, whole steps | length 64, whole steps, no move by content | GRU, 8 / 64 |
+    |---|---|---|---|---|
+    | shift by one | 1.00 | 0.10 | 1.00, 0.76, 1.00 (3 seeds) | 1.00 / 0.00 |
+    | each item twice | 1.00 | 0.93 | | 0.97 / 0.00 |
+    | keep the items of one kind | 0.75 | 0.00 | 0.00 | 0.99 / 0.00 |
+    | count the items of one kind | 0.96 | 0.00 | 0.00 | 1.00 / 0.00 |
+    | the list, then the list again | 0.01 | 0.00 | 0.00 | 0.35 / 0.00 |
+    | parity | 0.95 | | 0.55 | 1.00 / 1.00 |
+
+    "Each item twice" is a real loop of two vops (the write pointer steps every tick, the
+    read pointer every other tick). Shift learns the right loop but starts it with a move
+    by content that lands in the wrong place once steps are whole; with that move held off
+    it is exact. Keep, count, the doubled list and parity are not learned as routines:
+    each needs a pointer to step or not by the item just loaded, or to turn at the end of
+    a list. Parity is the one task a GRU carries to length 64 and the machine does not.
+42. **A conditional jump is learned; it is not the weak spot.** [solid for "learned": 3 of
+    3 seeds] A signal slot says copy or reverse. Right at trained lengths on every seed.
+    With the signal dark after the first tick the pc carries it and a different loop runs
+    for each signal; at length 64 with whole steps 0.99 to 1.00 of items are right on all
+    three seeds. With the signal left lit, two seeds of three never change the pc: one vop
+    reads the signal each tick and steps the write pointer forward or back by it.
+43. **The move by content is used as a blur in training and often breaks the exact run.**
+    [hint] Shift and the copy-or-reverse task both become exact at length 64 when the
+    move by content is held off (finding 41, 42), and the lookup that worked best used the
+    built-in "another slot like this one" form, not a vector the vop supplies (finding 36).
 

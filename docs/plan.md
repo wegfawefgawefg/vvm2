@@ -20,9 +20,11 @@ a plain net beside it, tested beyond what it trained on, run with whole steps, w
   another data set).
 - *(running)* Cellular automata: one-line rules, then Conway's, learned on small boards and
   run on larger ones.
-- *(running)* Algorithms and conditionals: adding with a carry, counting, parity, sorting,
-  matching brackets, keeping only some items; the lights game at long holds, with and
-  without a clock device.
+- *(done as far as it goes)* Algorithms and conditionals (findings 41 to 43): plain loops
+  carry; a pointer that must wait or turn by what it reads is not learned. Written and not
+  scored: compare, adding with a carry, brackets, sort.
+- *(open)* The lights game: it fits in the machine (finding 40); training has not found the
+  routine by any method tried.
 - *(done)* Ordinary curves and a pole (findings 38, 39). Not yet run: the pole with
   velocities hidden, swing-up.
 - *(next, after the image device is in)* Cats against dogs, then all ten classes of a
