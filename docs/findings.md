@@ -181,4 +181,24 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     at: whether the pc cycles or runs straight through, and whether the pointers step by a
     fixed turn. Not tried: lists placed at random starts along the line, and a bank too
     small to hold an unrolled program, either of which should force a loop.
+31. **Lists that start anywhere make it learn the routine, and the routine carries to longer
+    lists.** [hint: one seed, 3,000 steps, `scripts/tape.sh copy 3000 shift=16`] Copy,
+    trained on lengths 2 to 8, items right / whole sequences right at lengths 8, 12, 16, 24:
+
+    | training | bank | 8 | 12 | 16 | 24 |
+    |---|---|---|---|---|---|
+    | lists always at the start of the line | 128 vops | 1.00 / 1.00 | 0.70 / 0.00 | 0.56 / 0.00 | 0.39 / 0.00 |
+    | | 8 vops | 1.00 / 1.00 | 0.74 / 0.01 | 0.60 / 0.00 | 0.42 / 0.00 |
+    | lists starting anywhere in the first 16 places | 128 vops | 1.00 / 1.00 | 0.99 / 0.83 | 0.80 / 0.00 | 0.58 / 0.00 |
+    | | 8 vops | 0.99 / 0.90 | 0.84 / 0.08 | 0.67 / 0.00 | 0.50 / 0.00 |
+    | a GRU of the same size (finding 30) | | 1.00 / 1.00 | 0.57 / 0.00 | 0.50 / 0.00 | 0.35 / 0.00 |
+
+    The trace of the third row is a loop: after three ticks of setting up, one vop (number
+    75) runs on every tick while the read pointer and the write pointer step along the list
+    together, 0 0 1 1 2 2 3 3 4 ... On a list of 12, half as long again as any it trained
+    on, the same vop keeps running and both pointers walk on to place 11: 83% of such lists
+    are copied whole. The machine trained with lists always at the start also settles on
+    one vop and steps its write pointer, but past place 8 the pointer jumps about: those
+    addresses were never seen. A small bank was not what forced the loop; it loops with 128
+    vops too. At 16 and 24 it still fails whole lists.
 
