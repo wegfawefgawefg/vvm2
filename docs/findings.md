@@ -158,3 +158,27 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     each vop's matrix grew with what it sees; but only 24 to 30 of the 256 vops ever run,
     so about a tenth of those weights are in use.
 
+## Tasks that need steps (`vvm2/tape.py`, the generalised core)
+
+30. **It copies, reverses and plays the lights game perfectly at the lengths it was trained
+    on, and does not carry any of them to longer ones.** [hint: one seed, 3,000 steps,
+    `scripts/tape.sh copy|reverse|simon`] Share of items right / share of whole sequences
+    right; lists trained on lengths 2 to 8, the lights game on 1 to 6.
+
+    | task | model | trained length | longer | longer still | longest |
+    |---|---|---|---|---|---|
+    | copy (8, 12, 16, 24) | vvm | 1.00 / 1.00 | 0.70 / 0.00 | 0.55 / 0.00 | 0.39 / 0.00 |
+    | | GRU | 1.00 / 1.00 | 0.57 / 0.00 | 0.50 / 0.00 | 0.35 / 0.00 |
+    | reverse (8, 12, 16, 24) | vvm | 1.00 / 1.00 | 0.13 / 0.00 | 0.13 / 0.00 | 0.13 / 0.00 |
+    | | GRU | 0.99 / 0.92 | 0.67 / 0.01 | 0.52 / 0.00 | 0.38 / 0.00 |
+    | lights game (6, 8, 10, 12) | vvm | 1.00 / 1.00 | 0.45 / 0.00 | 0.35 / 0.00 | 0.29 / 0.00 |
+    | | GRU | 1.00 / 1.00 | 0.80 / 0.08 | 0.67 / 0.00 | 0.61 / 0.00 |
+
+    The machine stores a sequence that arrives one light at a time and plays it back, with
+    nothing but its own stores to hold it. But it has learned the places, not the routine:
+    on a longer copy it gets the first eight items and little after; on a longer reverse it
+    is at chance (0.125), where the GRU still gets the most recent items. Not yet looked
+    at: whether the pc cycles or runs straight through, and whether the pointers step by a
+    fixed turn. Not tried: lists placed at random starts along the line, and a bank too
+    small to hold an unrolled program, either of which should force a loop.
+
