@@ -214,5 +214,7 @@ Nothing below has been shown beyond that.
     be shared or separate. Kinder to the hardware than idea 63 (each memory stays in its
     own core's cache) and it forces a narrow message between parts. To compare: shared
     memory, separate memories with a mailbox, and private memory plus a small shared
-    region.
-
+    region. The owner's pick is private plus shared. Machines reach each other
+    the two ways a pointer reaches a slot (owner): by position (a fixed mailbox each, a
+    neighbour) and by content (post a message in the shared region; whoever seeks
+    something like it finds it, so no machine has to know which other one does what).
