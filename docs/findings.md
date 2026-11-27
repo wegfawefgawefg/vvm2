@@ -212,3 +212,31 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     8 on 24. A search over rates lowers the worst far likeness only from 0.33 to 0.25:
     twelve numbers of position is a small address space.
 
+## Exact pointers (`vvm2/core.py` as it is now)
+
+33. **With pointers that are places moved by steps, copy and reverse are learned as loops
+    and carry to lists twelve times longer than any trained on.** [likely: one seed each,
+    3,000 steps, two trainings agree; `scripts/tape.sh copy`, `scripts/tape.sh reverse`]
+    Trained on lengths 2 to 8; items right / whole lists right:
+
+    | task | how it is run | 8 | 12 | 16 | 24 | 48 | 96 |
+    |---|---|---|---|---|---|---|---|
+    | copy | as trained (steps blended) | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 0.95 / 0.34 | 0.58 / 0.00 |
+    | copy | with whole steps | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 |
+    | reverse | as trained | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 0.98 / 0.60 | 0.67 / 0.00 |
+    | reverse | with whole steps | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 |
+    | copy | a GRU of the same size | 1.00 / 0.99 | 0.59 / 0.00 | 0.50 / 0.00 | 0.36 / 0.00 | 0.24 / 0.00 | |
+    | reverse | a GRU of the same size | 0.99 / 0.95 | 0.68 / 0.00 | 0.55 / 0.00 | 0.41 / 0.00 | 0.27 / 0.00 | |
+
+    The trace is a program: a few ticks of setting up (for reverse, the read pointer goes to
+    the last input slot), then one vop on every tick, the read pointer stepping one way and
+    the write pointer the other. As trained, a pointer is about 0.9 on its one slot and the
+    blur adds up over a long list (this is error building up along the loop, which finding
+    32 ruled out for the earlier form). Run with whole steps, every pointer taking its
+    likeliest step outright, there is no blur and no length at which it fails. Half the
+    weights of the address-vector form (0.49 million).
+34. **The lights game is not yet a routine in this form.** [hint: one seed] 12,000 steps:
+    1.00 / 1.00 at 6 lights, 0.80 / 0.07 at 8, 0.61 at 12; a GRU 0.79 / 0.12 and 0.61. Its
+    pointers are about half exact, and run with whole steps it falls to 0.47: what it
+    learned depends on the blur.
+
