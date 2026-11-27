@@ -1,11 +1,11 @@
 """Images through pointers that move on a grid and zoom.
 
-  python -m vvm2.image class TASK [STEPS]   classify mnist | kmnist | fashion | shapes
-  python -m vvm2.image look TASK            the look inside for the machine `class` saved:
+  python -m old.image7 class TASK [STEPS]   classify mnist | kmnist | fashion | shapes
+  python -m old.image7 look TASK            the look inside for the machine `class` saved:
                                             where the read pointers go, as text and a picture
                                             (which=mix, which=tuned: the machine saved by a
                                             run with mix= or tune=)
-  python -m vvm2.image time                 seconds a training step, nothing scored
+  python -m old.image7 time                 seconds a training step, nothing scored
   options after STEPS:  seed=0  ops=128  ticks=12  reads=4  scratch=8  mlp=1 (0 skips the MLP)
                         tune=0  further training steps run with whole steps (see `tune`)
                         mix=0   share of training passes run with whole steps (see `mixed`)
@@ -34,8 +34,8 @@ import sys
 import torch
 import torch.nn as nn
 
-from .common import TASKS, mlp_matched, params, score, train
-from .core import ANCHORS, SLOT, Core
+from vvm2.common import TASKS, mlp_matched, params, score, train
+from .core7 import ANCHORS, SLOT, Core
 
 N_IN, COARSE0, FINE0 = 66, 1, 17
 STEPS = ["stay", "right", "left", "down", "up", "zoom-in", "zoom-out", "to-in0", "to-inN",
@@ -184,7 +184,7 @@ def tune(vm, data, steps, seed, shift=0):
     would when running, and only the values (what is stored, the next pc, what is sought)
     are taught; a whole step passes no gradient to the choice of step. The core is put in
     its running mode with gradients left on; nothing in the machine is changed."""
-    from .common import shifted
+    from vvm2.common import shifted
     x, y = data[0], data[1]
     opt = torch.optim.AdamW(vm.parameters(), lr=3e-4, weight_decay=0.05)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=3e-4, total_steps=steps)
@@ -242,7 +242,7 @@ HEAD = ("| model | weights | multiply-adds an image | train | test | pointers ex
 
 def get_data(task, seed):
     if task == "shapes":
-        from .shapes import shape_data
+        from .shapes7 import shape_data
         return shape_data(seed)
     return TASKS[task](seed)
 
@@ -336,7 +336,7 @@ if __name__ == "__main__":
     if what == "time":
         timing(dict(a.split("=") for a in sys.argv[2:] if "=" in a))
     elif what == "look":
-        from .look import look
+        from .look7 import look
         look(task, int(opt.get("seed", 0)), opt.get("which", ""))
     else:
         classify(task, steps, opt)

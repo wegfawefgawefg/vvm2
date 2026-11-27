@@ -1,7 +1,7 @@
 """The lights game programmed by hand: two vops, weights written here, nothing trained.
 
-    python -m vvm2.simon_hand
-    python -m vvm2.simon_hand noise=0.3 steps=1500    does training keep it? (see settle)
+    python -m old.simon_hand7
+    python -m old.simon_hand7 noise=0.3 steps=1500    does training keep it? (see settle)
 
 This answers one question: does the routine fit in the machine as it is? The program is a
 tape recorder.
@@ -21,8 +21,8 @@ so the same two vops play any hold; it costs scratch slots, not counting.
 import torch
 import torch.nn.functional as F
 
-from .core import SLOT
-from .simon import SimonVM, score
+from .core7 import SLOT
+from .simon7 import SimonVM, score
 
 STAY, NEXT, SC0, OUT0 = 0, 1, 3 + 2, 3 + 4   # a pointer's choices: stay, the two steps,
 LOUD = 20.0                                   # then in0 inN sc0 scN out0 outN, then seek

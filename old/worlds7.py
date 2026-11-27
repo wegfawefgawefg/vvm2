@@ -1,4 +1,4 @@
-"""Two small physical worlds in torch, batched, for vvm2/control.py. No outside package.
+"""Two small physical worlds in torch, batched, for old/control7.py. No outside package.
 
 A world holds n episodes at once. `obs()` is what the driver may show the machine, `step`
 takes one action an episode, `score` is the result so far, `over()` says when to stop.

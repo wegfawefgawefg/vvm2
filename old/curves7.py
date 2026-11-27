@@ -1,6 +1,6 @@
 """Ordinary curves on the frozen core: xor of two numbers, a sine, two spirals.
 
-  python -m vvm2.curves TASK [STEPS] [key=value ...]      TASK: xor | sin | spirals | all
+  python -m old.curves7 TASK [STEPS] [key=value ...]      TASK: xor | sin | spirals | all
   options:  layout=one   one input slot holding the numbers in its first places (the default)
             layout=each  one input slot a number, the number in the slot's first place
             ticks=4      ticks the machine runs before the answer is read
@@ -12,7 +12,7 @@
                          the loss of the same batch run with whole steps (the gradient
                          then reaches the values and the fetch, not the pointer moves)
             trace=0      skip the tick-by-tick trace
-  python -m vvm2.curves --quick                           every task, 200 steps, one seed
+  python -m old.curves7 --quick                           every task, 200 steps, one seed
 
 How the numbers get in and out. There is no learned encoder and no readout. The driver
 lays the numbers out raw: a slot is 16 numbers, the input's numbers go in the first places
@@ -34,8 +34,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import TASKS, mlp_matched, params, score, train
-from .core import SLOT, Core
+from vvm2.common import TASKS, mlp_matched, params, score, train
+from .core7 import SLOT, Core
 
 
 def lay(x, layout):

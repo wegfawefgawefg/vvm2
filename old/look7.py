@@ -1,8 +1,8 @@
 """A look inside a trained image classifier: where the read pointers go.
 
-  python -m vvm2.image look TASK [seed=0] [which=tuned | which=mix]
+  python -m old.image7 look TASK [seed=0] [which=tuned | which=mix]
 
-Loads the machine `python -m vvm2.image class TASK` saved, runs it with whole steps (every
+Loads the machine `python -m old.image7 class TASK` saved, runs it with whole steps (every
 pointer on one slot) and prints, for a few test images, a trace: at each tick the vop, the
 slot each pointer loads from and the step it then takes. Then counts over 2,000 test images:
 which levels are looked at, which steps are taken, how much the places change with the
@@ -13,7 +13,7 @@ import os
 
 import torch
 
-from .image import FINE0, N_IN, STEPS, box, get_data, load, masses, paths
+from .image7 import FINE0, N_IN, STEPS, box, get_data, load, masses, paths
 
 IMG = os.environ.get("IMAGE_PICTURES", "docs/img")       # --quick writes elsewhere
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]       # one a read pointer

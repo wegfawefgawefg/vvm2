@@ -1,9 +1,9 @@
 """Cellular automata: a rule learned on small boards and run on larger ones.
 
-  python -m vvm2.automata line  [STEPS]   one row -> the next row under a one-line rule
-  python -m vvm2.automata rules [STEPS]   the same, the rule's table given beside the row
-  python -m vvm2.automata life  [STEPS]   Conway's game on a grid
-  python -m vvm2.automata quick           every task for a few steps, to see that it runs
+  python -m old.automata7 line  [STEPS]   one row -> the next row under a one-line rule
+  python -m old.automata7 rules [STEPS]   the same, the rule's table given beside the row
+  python -m old.automata7 life  [STEPS]   Conway's game on a grid
+  python -m old.automata7 quick           every task for a few steps, to see that it runs
   options after STEPS:  rule=110  the one-line rule         k=1      apply the rule k times
                         edge=wall or ring                   reads=3  read pointers (2 or 3)
                         ops=128   the size of the bank      seed=0   base=0  skip the nets
@@ -50,9 +50,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import params
-from .core import SLOT, Core
-from .tape import codebook
+from vvm2.common import params
+from .core7 import SLOT, Core
+from .tape7 import codebook
 
 DEAD, LIVE, LEFT, RIGHT = 0, 1, 2, 3
 KINDS = 4           # what an output slot can be read as

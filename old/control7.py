@@ -1,6 +1,6 @@
 """Control on the frozen core, trained without labels: balancing a pole, then harder.
 
-  python -m vvm2.control WORLD [ROUNDS] [key=value ...]
+  python -m old.control7 WORLD [ROUNDS] [key=value ...]
   WORLD:   pole    the cart and pole, all four state numbers shown
            blind   the same with the two velocities hidden
            swing   the pendulum swing-up
@@ -11,9 +11,9 @@
            ops=4 k=2 reads=2 scratch=4      the machine
            pop=32 eps=4 sigma=0.05 alpha=1  the evolution strategy
            batch=16 lr=0.003                the policy gradient
-  python -m vvm2.control --quick     pole, 3 rounds of each kind of training, tiny
+  python -m old.control7 --quick     pole, 3 rounds of each kind of training, tiny
 
-The worlds are in vvm2/worlds.py (the constants are in their headers).
+The worlds are in old/worlds7.py (the constants are in their headers).
 
 The loop. The driver writes the state numbers raw into the input slots (layout 'one': one
 slot, the numbers in its first places; 'each': a slot a number) before every tick, and
@@ -42,10 +42,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
-from .common import mlp_matched, params
-from .core import SLOT, Core
-from .curves import MOVES, lay, place
-from .worlds import CartPole, Pendulum
+from vvm2.common import mlp_matched, params
+from .core7 import SLOT, Core
+from .curves7 import MOVES, lay, place
+from .worlds7 import CartPole, Pendulum
 
 
 def machine_memory():

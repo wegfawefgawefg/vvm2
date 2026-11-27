@@ -1,6 +1,6 @@
 """The lights game trained by evolution: the exact machine, forward only, no gradient.
 
-    python -m vvm2.simon_es [ROUNDS] [ops=4 max=6 pop=32 sigma=0.05 seed=0]
+    python -m old.simon_es7 [ROUNDS] [ops=4 max=6 pop=32 sigma=0.05 seed=0]
 
 Each round: 2 * pop copies of the weights, each with random noise added (in pairs, +noise
 and -noise), all run with whole steps on the same batch of games; the weights then move
@@ -13,8 +13,8 @@ import torch
 import torch.nn.functional as F
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
-from .common import params
-from .simon import SimonVM, score, show_trace
+from vvm2.common import params
+from .simon7 import SimonVM, score, show_trace
 
 
 def run(rounds=1500, ops=4, most=6, pop=32, sigma=0.05, seed=0, colours=4):

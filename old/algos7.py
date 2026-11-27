@@ -1,7 +1,7 @@
 """A ladder of small algorithms on the frozen core, each trained on short inputs and tested
 on much longer ones, to find where the machine stops.
 
-  python -m vvm2.algos TASK [STEPS] [options]
+  python -m old.algos7 TASK [STEPS] [options]
 
   shift     every item moved one place toward the front; the last item stays where it was
   double    every item written twice in a row (a b c -> a a b b c c)
@@ -48,9 +48,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import params
-from .core import SLOT, Core
-from .tape import codebook, no_seek
+from vvm2.common import params
+from .core7 import SLOT, Core
+from .tape7 import codebook, no_seek
 
 SYMBOLS = 8
 MARK, MARK2, DARK = 10, 11, 12          # two marks, and a slot with nothing in it

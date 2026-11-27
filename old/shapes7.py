@@ -1,8 +1,8 @@
 """Shapes: a generator with no download, and the tasks that write a canvas.
 
-  python -m vvm2.image class shapes [STEPS]   name the shape (the classifier of vvm2/image.py)
-  python -m vvm2.shapes draw [STEPS]          draw a named shape at a named size and place
-  python -m vvm2.shapes gen TASK [STEPS]      generate fashion | mnist | kmnist images from a
+  python -m old.image7 class shapes [STEPS]   name the shape (the classifier of old/image7.py)
+  python -m old.shapes7 draw [STEPS]          draw a named shape at a named size and place
+  python -m old.shapes7 gen TASK [STEPS]      generate fashion | mnist | kmnist images from a
                                               class and a few style numbers
   options after STEPS:  seed=0  ops=64  reads=2  ruler=1 (0: no ruler slots)
 
@@ -35,8 +35,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import TASKS, mlp_matched, params
-from .core import SLOT, Core
+from vvm2.common import TASKS, mlp_matched, params
+from .core7 import SLOT, Core
 
 NAMES = ["circle", "square", "triangle"]
 IMG = os.environ.get("IMAGE_PICTURES", "docs/img")       # --quick writes elsewhere
@@ -191,7 +191,7 @@ def sheet(rows, title, path, labels=None):
 
 
 def bank_line(painter, request):
-    from .image import bank_use
+    from .image7 import bank_use
     painter.core.hard = True
     with torch.no_grad():
         painter(request, trace=True)
