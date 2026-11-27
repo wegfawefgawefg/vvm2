@@ -247,7 +247,7 @@ def fit(model, make, steps, seed, batch=64, say=0, whole=0.0):
         w = make(batch, None, g)
         loss = F.cross_entropy(model(w)[:, w.trained].flatten(0, 1), w.want[:, w.trained].flatten())
         if say and step % say == say - 1:
-            print("  step %d: loss %.3f" % (step + 1, loss), file=sys.stderr, flush=True)
+            print("  step %d: loss %.3f" % (step + 1, loss.item()), file=sys.stderr, flush=True)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -331,7 +331,7 @@ def rule_pools(seed=3, held=64):
 
 def run(task, steps, seed=0, reads=3, ops=128, rule=110, k=1, edge="wall", tpc=None,
         base=True, sizes=None, boards=300, whole=0.0):
-    torch.set_num_threads(4)
+    torch.set_num_threads(1)     # one thread a job: quicker than four when the CPU is shared
     torch.manual_seed(seed)
     seen, held = rule_pools()
     if task == "life":

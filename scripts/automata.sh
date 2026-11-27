@@ -4,7 +4,7 @@
 #   scripts/automata.sh rules [STEPS] [reads=4]      the rule's table given beside the row
 #   scripts/automata.sh life  [STEPS]                Conway's game on a grid
 #   scripts/automata.sh --quick                      every task for a few steps
-# Other options: ops=128 tpc=2 base=0 sizes=12,24. One job, 4 threads, nice 19.
+# Other options: ops=128 tpc=2 base=0 sizes=12,24 whole=0.5. One job, 1 thread, nice 19.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -x .venv/bin/python ] || scripts/setup.sh
