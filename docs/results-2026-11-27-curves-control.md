@@ -57,7 +57,8 @@ swing-up on every start; the machine is no better than the GRU.
    run with whole steps the same weights fail (xor 0.79, sine error 0.45, spirals 0.56),
    because training leaves the pointers half on one slot and half on another and the fit
    leans on that blur. Adding the whole-step run of each batch to the training loss fixes
-   it (sine 0.00002, spirals 0.985, xor 0.94 with whole steps). Both layouts behave alike.
+   it (sine 0.00002, spirals 0.985 to 0.988, xor 0.94 with whole steps). Both layouts
+   behave alike.
 2. **Balancing a pole.** The machine, trained by an evolution strategy with whole steps and
    no labels, balances all 500 steps on 100 of 100 test episodes on 6 of 6 runs; it takes
    about 3 times the episodes an MLP of the same weights takes (9,720 against 3,312; 2.2 to
@@ -96,7 +97,7 @@ spirals: 1,000 fresh points). Train scores are 1.000 for every class row except 
 | xor | each | 0.965 (0.953, 0.963, 0.980) | 0.475 (0.521, 0.499, 0.406); train 0.42 | 0.953 (0.972, 0.963, 0.923) | 0.945 (0.870, 0.998, 0.967) | 0.998 | 0.997 |
 | sine | one | 0.00002 (all three) | 0.452 (0.302, 0.490, 0.563) | 0.00003 (all three) | 0.00002 (0.00001, 0.00002, 0.00001) | under 0.000005 | under 0.000005 |
 | spirals | one | 1.000 (0.999, 1.000, 1.000) | 0.555 (0.402, 0.455, 0.808) | 1.000 | 0.985 (1.000, 0.955, 1.000); train 0.987 | 1.000 | 1.000 |
-| spirals | each | 1.000 (0.999, 1.000, 1.000) | 0.504 (0.450, 0.512, 0.550); train 0.516 | EACHMIXA | EACHMIXB | 1.000 | 1.000 |
+| spirals | each | 1.000 (0.999, 1.000, 1.000) | 0.504 (0.450, 0.512, 0.550); train 0.516 | 0.999 (0.999, 0.999, 1.000) | 0.988 (0.965, 0.999, 1.000); train 0.989 | 1.000 | 1.000 |
 
 "Trained on whole steps too" (`mix=1`): every training step adds the loss of the same
 batch run with whole steps. That run is not differentiable in the pointer moves, so its
