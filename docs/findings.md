@@ -201,4 +201,14 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     one vop and steps its write pointer, but past place 8 the pointer jumps about: those
     addresses were never seen. A small bank was not what forced the loop; it loops with 128
     vops too. At 16 and 24 it still fails whole lists.
+32. **Where the copy loop fails on long lists it is not losing its place step by step; it
+    is confusing places whose addresses look alike.** [likely: `python -m vvm2.drift`, two
+    trainings] On a list of 16 the middle is 0.99 right and the two ends fail (0.47 to 0.76).
+    The neighbouring item is written 1 time in 8, which is chance, so the pointers have not
+    slipped. The wrong item is the one 12 or 13 places away (half the time at the start of
+    the list, against 1 in 8 by chance). The position code is six sine waves, and with the
+    rates first chosen, places 12 apart are as alike (0.28) as places 4 apart (0.29). The
+    pointers are also smeared over more slots on longer lists: 3 on a list of 8, 6 on 16,
+    8 on 24. A search over rates lowers the worst far likeness only from 0.33 to 0.25:
+    twelve numbers of position is a small address space.
 

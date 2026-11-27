@@ -43,11 +43,21 @@ POS = 12
 REGIONS = {"head": 0, "input": 1, "scratch": 2, "output": 3}
 
 
+# Six wave rates for positions along a line. With only six, two places far apart can look
+# alike: with the first set, places 12 apart are as alike as places 4 apart, and a copy loop
+# on a long list writes the item 12 places away (finding 32). The second set was searched
+# for the least far likeness with neighbours still distinct; it lowers the worst case from
+# 0.33 to 0.25, no more: 12 numbers of position is a small address space.
+LINE_RATES = {"first": [1.0, 0.5556, 0.3086, 0.1715, 0.0953, 0.0529],
+              "searched": [0.856, 0.5839, 0.376, 0.1903, 0.1132, 0.0512]}
+line_rates = "first"
+
+
 def line_pos(n, start=0):
     """Positions along a line: slot i is sines and cosines of i at six scales, so the next
     slot is always the same small turn away, at any length."""
     i = torch.arange(start, start + n).float().unsqueeze(1)
-    rate = 1.0 / (1.8 ** torch.arange(6).float())
+    rate = torch.tensor(LINE_RATES[line_rates])
     return torch.cat([torch.sin(i * rate), torch.cos(i * rate)], dim=1)
 
 
@@ -86,7 +96,7 @@ def move(slot, c, share=None):
 
 
 class Core(nn.Module):
-    def __init__(self, scratch=16, ops=128, k=4, reads=2, see_head=True):
+    def __init__(self, scratch=16, ops=128, k=4, reads=2, see_head=True, sharp=8.0):
         super().__init__()
         self.scratch, self.ops, self.k, self.reads, self.see_head = scratch, ops, k, reads, see_head
         self.head = head = reads + 2
@@ -98,7 +108,7 @@ class Core(nn.Module):
         fan_out = (1 + head) * SLOT
         self.m = nn.Parameter(torch.randn(ops, fan_out, fan_in) / math.sqrt(fan_in))
         self.bias = nn.Parameter(torch.randn(ops, fan_out) * 0.1)
-        self.sharp = nn.Parameter(torch.tensor(8.0))      # how sharply an address picks slots
+        self.sharp = nn.Parameter(torch.tensor(float(sharp)))  # how sharply an address picks slots
         self.register_buffer("picks", torch.zeros(ops))
         self.trace = None
 

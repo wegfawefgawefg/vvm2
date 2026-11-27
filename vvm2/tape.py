@@ -8,6 +8,8 @@
                                   written out step by step, so it has to loop)
                         shift=16  lists begin anywhere in the first 16 places of the line
                         gru=0     skip the GRU
+                        sharp=20  how sharply a pointer picks slots at the start (it is learned)
+                        rates=searched   the second set of wave rates for places on a line
 
 Lists: the world lays the list out one item a slot along a line, and reads the answer from
 output slots along a line of the same length. An item is one of 8 symbols, each a fixed
@@ -141,7 +143,9 @@ def show_trace(vm, task, length, g):
           flush=True)
 
 
-def run(task, steps, ops=128, shift=0, only_vvm=False):
+def run(task, steps, ops=128, shift=0, only_vvm=False, sharp=8.0, rates="first"):
+    from . import core
+    core.line_rates = rates
     torch.set_num_threads(8)
     simon = task == "simon"
     kinds = COLOURS if simon else SYMBOLS
@@ -155,7 +159,7 @@ def run(task, steps, ops=128, shift=0, only_vvm=False):
         return logits, (x.flip(1) if task == "reverse" else x)
 
     torch.manual_seed(0)
-    vm = TapeVM(ops=ops, k=min(4, ops))
+    vm = TapeVM(ops=ops, k=min(4, ops), sharp=sharp)
     make = (lambda w: SimonGRU(w)) if simon else (lambda w: ListGRU(w))
     gru = make(sized(make, params(vm)))
     print("%s: trained on lengths %d to %d, %d steps, a bank of %d vops%s. In each cell: "
@@ -189,6 +193,9 @@ def run(task, steps, ops=128, shift=0, only_vvm=False):
                 hit = logits.argmax(dim=-1) == want
                 cells.append("%.2f / %.2f" % (hit.float().mean(), hit.all(dim=1).float().mean()))
         print("| %s | %d | %s |" % (name, params(model), " | ".join(cells)), flush=True)
+        if name == "vvm":
+            print("  sharpness of the pointers after training: %.1f" % vm.core.sharp.item(),
+                  flush=True)
         if name == "vvm" and not simon:
             for length in (8, 12):
                 show_trace(vm, task, length, g)
@@ -199,4 +206,5 @@ if __name__ == "__main__":
     run(sys.argv[1] if len(sys.argv) > 1 else "copy",
         int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
         ops=int(extra.get("ops", 128)), shift=int(extra.get("shift", 0)),
-        only_vvm=extra.get("gru", "1") == "0")
+        only_vvm=extra.get("gru", "1") == "0", sharp=float(extra.get("sharp", 8)),
+        rates=extra.get("rates", "first"))
