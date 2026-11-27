@@ -13,7 +13,7 @@ import os
 
 import torch
 
-from .image import FINE0, N_IN, STEPS, box, get_data, load, paths
+from .image import FINE0, N_IN, STEPS, box, get_data, load, masses, paths
 
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]       # one a read pointer
 
@@ -78,6 +78,93 @@ def counts(vm, x):
     print("  ink under the read pointers (mean pixel): %.3f on the image itself, %.3f at the "
           "same places on another image, %.3f over a whole image" % (own, other, x.mean()))
     return places, steps
+
+
+def slot_ink(x):
+    """[B, 784] -> [B, 66]: the mean pixel under each input slot."""
+    img = x.view(-1, 28, 28)
+    cols = []
+    for i in range(N_IN):
+        _, top, left, size = box(i)
+        cols.append(img[:, top:top + size, left:left + size].mean(dim=(1, 2)))
+    return torch.stack(cols, dim=1)
+
+
+def blend_counts(vm, x):
+    """The machine as trained, where a pointer is a blend over slots: where the blend is."""
+    _, at, step = masses(vm, x)
+    reads = vm.core.reads
+    at, step = at[:, :, :reads], step[:, :, :reads]
+    on = at[..., 1:1 + N_IN]                                   # [T, B, R, 66]
+    level = [on[..., 0].mean().item(), on[..., 1:FINE0].sum(-1).mean().item(),
+             on[..., FINE0:].sum(-1).mean().item()]
+    print("  of the read pointers, summed over the blend: whole image %.2f, coarse %.2f, fine "
+          "%.2f, not on the image %.2f" % (*level, 1 - sum(level)))
+    spread = torch.exp(-(at * at.clamp_min(1e-9).log()).sum(-1)).mean().item()
+    print("  slots a read pointer is spread over (the exponential of its entropy): %.1f" % spread)
+    took = step.mean(dim=(0, 1, 2))
+    print("  steps taken, by share of the blend: " + ", ".join(
+        "%s %.2f" % (STEPS[i], took[i]) for i in took.argsort(descending=True) if took[i] >= 0.005))
+    ink = slot_ink(x)
+    mass = on.sum(dim=(0, 2))                                  # [B, 66]
+    fine = mass[:, FINE0:]
+    own = (fine * ink[:, FINE0:]).sum() / fine.sum()
+    other = (fine * ink.roll(1, 0)[:, FINE0:]).sum() / fine.sum()
+    print("  ink under the fine-level part of the blend (mean pixel): %.3f on the image itself, "
+          "%.3f at the same places on another image, %.3f over a whole image" % (
+              own, other, x.mean()))
+    moved = (mass - mass.mean(0, keepdim=True)).abs().sum(1).mean() / mass.sum(1).mean()
+    print("  share of the blend that is somewhere else than on the average image: %.2f" % (moved / 2))
+
+
+def blend_picture(vm, x, y, path, n=4):
+    """Rows: images. Columns: ticks. Blue: how much of the read pointers is on each pixel's
+    fine patch (darker is more; half a pointer on one fine patch is the darkest). The
+    outline is the image. Under a panel: the read pointers' shares by level."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    _, at, _ = masses(vm, x[:n])
+    reads = vm.core.reads
+    on = at[:, :, :reads, 1:1 + N_IN].sum(dim=2)               # [T, B, 66]
+    ticks = len(on)
+    fig, axes = plt.subplots(n, ticks, figsize=(1.25 * ticks, 1.55 * n + 0.9), facecolor="white",
+                             squeeze=False)
+    for b in range(n):
+        for t in range(ticks):
+            ax = axes[b, t]
+            heat = torch.zeros(28, 28)
+            for i in range(1, N_IN):                           # coarse and fine, as density
+                _, top, left, size = box(i)
+                heat[top:top + size, left:left + size] += on[t, b, i] * 16 / size ** 2
+            ax.imshow(heat.numpy(), cmap="Blues", vmin=0, vmax=0.5, extent=(0, 28, 28, 0))
+            mid = torch.arange(28) + 0.5
+            ax.contour(mid.numpy(), mid.numpy(), x[b].view(28, 28).numpy(), levels=[0.4],
+                       colors="#333333", linewidths=0.7)
+            ax.set_xlim(0, 28)
+            ax.set_ylim(28, 0)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for side in ax.spines.values():
+                side.set_color("#cccccc")
+            ax.set_xlabel("W %.1f C %.1f F %.1f" % (on[t, b, 0], on[t, b, 1:FINE0].sum(),
+                                                    on[t, b, FINE0:].sum()),
+                          fontsize=6, color="#555555", labelpad=2)
+            if b == 0:
+                ax.set_title("tick %d" % t, fontsize=8, color="#333333")
+            if t == 0:
+                ax.set_ylabel("class %d" % y[b], fontsize=7, color="#333333")
+    fig.suptitle("Where the read pointers are at each tick, as trained: each pointer is a blend "
+                 "over slots. Blue: how much of the %d read pointers is on each\npatch (coarse "
+                 "patches spread over their four fine ones). Outline: the image. Under a panel: "
+                 "how many pointers' worth is on the whole-image slot (W),\nthe coarse level (C) "
+                 "and the fine level (F); the rest is on scratch or output." % reads,
+                 fontsize=8, x=0.01, ha="left", color="#111111")
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.45 / (1.55 * n + 0.9)))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+    print("  wrote %s" % path)
 
 
 def picture(vm, x, y, path, n=4):
@@ -156,8 +243,11 @@ def look(task, seed=0, tuned=False):
         print(" %s:" % ("run with whole steps" if hard else "as trained (likeliest slot of each "
                                                            "pointer)"))
         counts(vm, tx[:2000])
+        if not hard:
+            blend_counts(vm, tx[:2000])
     print(" traces, run with whole steps (W the whole image, C12 coarse row 1 column 2, F35 "
           "fine row 3 column 5, s scratch, out the output slot):")
     trace_text(vm, tx, ty)
     picture(vm, tx, ty, "docs/img/look-%s%s.png" % (task, "-tuned" if tuned else ""))
     vm.core.hard = False
+    blend_picture(vm, tx, ty, "docs/img/look-%s%s-blend.png" % (task, "-tuned" if tuned else ""))

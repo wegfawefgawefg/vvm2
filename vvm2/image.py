@@ -6,6 +6,7 @@
   python -m vvm2.image time                 seconds a training step, nothing scored
   options after STEPS:  seed=0  ops=128  ticks=12  reads=4  scratch=8  mlp=1 (0 skips the MLP)
                         tune=0  further training steps run with whole steps (see `tune`)
+                        mix=0   share of training passes run with whole steps (see `mixed`)
 
 The image device. A 28 by 28 grey image is laid out as 66 input slots of 16 numbers, at
 three levels:
@@ -92,9 +93,16 @@ class ImageVM(nn.Module):
         self.ticks, self.outputs = ticks, outputs
         self.register_buffer("go", image_go())
         self.scale = nn.Parameter(torch.tensor(5.0))
+        self.whole = False      # a training pass run with whole steps (see `mixed`)
 
     def forward(self, x, trace=False):
+        if self.whole and self.training:      # the core in its running mode, gradients on
+            self.core.eval()
+            self.core.hard = True
         outs = self.core(levels(x), self.ticks, 1, trace=trace, go=self.go)
+        if self.whole and self.training:
+            self.core.train()
+            self.core.hard = False
         return outs[-1][:, 0, :self.outputs] * self.scale
 
     def madds(self):
@@ -117,22 +125,30 @@ class ImageVM(nn.Module):
         return "W" if i == 0 else "%s%d%d" % (b[0][0].upper(), b[1] // b[3], b[2] // b[3])
 
 
-def paths(vm, x):
-    """Run x with a trace. Returns the best-matching vop at each tick [T, B], the slot each
-    pointer is on when each tick loads [T, B, P] (its likeliest slot; memory slot numbers,
-    so input slot i is i + 1), and the step each then takes [T, B, P]."""
+def masses(vm, x):
+    """Run x with a trace. Returns the best-matching vop at each tick [T, B]; where each
+    pointer is when each tick loads, as the share of it on each memory slot [T, B, P, slots]
+    (input slot i is memory slot i + 1); and the share of each step it then takes
+    [T, B, P, steps]. Run with whole steps the shares are all 0 or 1."""
     core = vm.core
     with torch.no_grad():
         vm(x, trace=True)
     slots = 1 + N_IN + core.scratch + 1
     ends = [1, N_IN, 1 + N_IN, N_IN + core.scratch, slots - 1, slots - 1]
-    start = torch.softmax(core.boot_at, dim=-1)      # the same sum the core makes
+    start = torch.softmax(core.boot_at.detach(), dim=-1)      # the same sum the core makes
     if core.hard:
         start = nn.functional.one_hot(start.argmax(dim=-1), ANCHORS).float()
     at0 = start @ nn.functional.one_hot(torch.tensor(ends), slots).float()
-    places = [at0.argmax(dim=-1).expand(len(x), -1)] + [t[1].argmax(dim=-1) for t in core.trace]
-    return (torch.stack([t[0] for t in core.trace]), torch.stack(places[:-1]),
-            torch.stack([t[2].argmax(dim=-1) for t in core.trace]))
+    at = [at0.expand(len(x), -1, -1)] + [t[1] for t in core.trace]
+    return (torch.stack([t[0] for t in core.trace]), torch.stack(at[:-1]),
+            torch.stack([t[2] for t in core.trace]))
+
+
+def paths(vm, x):
+    """As `masses`, but the likeliest slot of each pointer [T, B, P] and the likeliest step
+    [T, B, P]."""
+    vops, at, step = masses(vm, x)
+    return vops, at.argmax(dim=-1), step.argmax(dim=-1)
 
 
 def bank_use(vops, ops):
@@ -185,6 +201,17 @@ def tune(vm, data, steps, seed, shift=0):
     vm.core.hard = False
 
 
+def mixed(share, seed):
+    """For common.train's each_step: run this share of training passes with whole steps
+    (every pointer takes its likeliest step, as when running; such a pass teaches the
+    values and gives the choice of step no gradient). The other passes are as usual."""
+    g = torch.Generator().manual_seed(seed + 77)
+
+    def each_step(model, done):
+        model.whole = bool(torch.rand(1, generator=g) < share)
+    return each_step
+
+
 def rows(vm, data, label, fit=None):
     """The table rows for one trained machine: as trained, and run with whole steps."""
     x, y, tx, ty, kind = data
@@ -235,8 +262,12 @@ def classify(task, steps, opt):
     vm = ImageVM(outputs, ticks=int(opt.get("ticks", 12)), **core)
     print("%s, %d steps, seed %d, %d ticks, %d read pointers, a bank of %d vops\n%s" % (
         task, steps, seed, vm.ticks, vm.core.reads, vm.core.ops, HEAD), flush=True)
-    fit, _, secs = train(vm, data, steps, 128, 3e-3, seed, wd=0.05, shift=shift)
-    for row in rows(vm, data, "vvm", fit):
+    mix = float(opt.get("mix", 0))
+    fit, _, secs = train(vm, data, steps, 128, 3e-3, seed, wd=0.05, shift=shift,
+                         each_step=mixed(mix, seed) if mix else None)
+    vm.whole = False
+    name = "vvm, %.2f of passes with whole steps" % mix if mix else "vvm"
+    for row in rows(vm, data, name, None if mix else fit):
         print(row, flush=True)
     os.makedirs("out/image", exist_ok=True)
     torch.save({"state": vm.state_dict(), "outputs": outputs, "ticks": vm.ticks, "core": core},

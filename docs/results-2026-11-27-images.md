@@ -38,3 +38,14 @@ same number of weights trained the same way.
    to 3 times the MLP's.
 7. **Generating Fashion** (if run): recognisable as its class, blurrier than the MLP given
    the same class and style numbers; pixel error above the MLP's.
+
+### A further prediction, written after the first two runs and before the run it is about
+
+Seen by then (one seed each): MNIST at 2,000 steps 0.951 as trained and 0.29 run with whole
+steps; naming shapes 1.000 as trained and 0.59 with whole steps, 0.65 after 500 steps taught
+with whole steps. So prediction 3 is already wrong for shapes.
+
+8. **Whole steps on half the training passes** (`mix=0.5`; such a pass teaches values and
+   gives the choice of step no gradient), shapes, one seed: the score run with whole steps
+   rises to 0.8 to 0.9 and the as-trained score stays above 0.98. Low confidence: nothing in
+   it teaches the machine which step to take when steps are whole.
