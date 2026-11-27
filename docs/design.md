@@ -1,78 +1,81 @@
-# The vvm, version 0
+# The design
 
-**Out of date.** This page describes the first build, in which an op was a vector added to
-the state. That was wrong. The vvm now is `vvm2/vop.py`: a vop is a small feed-forward
-layer (a matrix and a bias) applied to the state, fetched by a key; nothing else computes.
-Its header says exactly what one tick does. This page is kept until it is rewritten; the
-list of ideas is `docs/ideas.md`.
+What the machine is now. The code is `vvm2/core.py`, and its header says the same thing in
+fewer words. How it got here, and the five earlier forms, are at the end.
 
-Plain statement of what is built first. Everything here is a starting point to be measured,
-not a belief.
+## The machine
 
-## Parts
+A virtual machine in which every number is a vector, every address is a vector matched by
+nearness, and every instruction is a learned op (a vop). It is fixed and knows nothing: it
+is the same for every task. What it does is decided by what is in its memory.
 
-- **State**: R registers of width d (start R = 1 to 4, d = 64 to 256). The input is written
-  into the state on every tick it is present.
-- **Program bank**: N entries. Entry i has a key and a separate value of width d.
-  - Query: `q = norm(W_q . state)`, split in two halves.
-  - Addressing by product keys: two tables of sqrt(N) sub-keys; the score of entry (a, b)
-    is the first half's score with sub-key a plus the second half's with sub-key b. The
-    top k of the N entries are found exactly from the top k of each half, with no index.
-  - Read ("fractional load"): `edit = sum over the top k of softmax(score)_i * value_i`.
-  - Apply: `state = state + edit`. Doing nothing is the default; an entry only edits.
-  - Several heads may query at once.
-- **Data memory**: a store of (key, value) pairs written at run time and read with the same
-  top-k lookup. Write ("fractional store"): the vvm emits a key, a value and a strength
-  each tick. Version 0 keeps it apart from the program bank and clears it each episode.
-  Whether the two can be one store with a slow write path (gradient) and a fast one (the
-  machine's own writes) is an open question, and the answer to "will it learn continually".
-- **ALU**: the step that applies the retrieved ops to the state. Version 0 applies an op
-  by adding its vector, weighted by how well its key matched. There is no dense layer on
-  the state anywhere: the bank of ops is the only thing that computes. (A first build had
-  an ordinary dense block here; it was removed, because it is a standard net and would do
-  the work the ops are meant to do.) Richer ways to apply an op are an open question.
-- **Ticks**: T ticks per input with the same weights. The readout is a linear map of the
-  state after the last tick.
+**Memory** is one list of slots, 16 numbers each. Every slot has an address, also 16
+numbers: 4 for the region, 12 for the position inside the region. Regions:
 
-## Training
+- head: the machine's own slots. Slot 0 is the pc; then the read addresses; then the write
+  address. They are ordinary memory, and anything can point at them.
+- input: written by the world. The program can read it and cannot write it.
+- scratch: starts empty.
+- output: written by the program, read by the world.
 
-Backprop through the ticks and, for sequences, truncated backprop through time. The
-gradient reaches the top-k values and, through the softmax over the k scores, the query and
-the sub-keys. Entries outside the top k get nothing on that step. Sparse updates for the
-bank, ordinary ones for the rest.
+The world decides how many input and output slots there are and gives each its position: a
+line for a list, a grid for an image, nothing in particular for a single light or button.
+Adding a device is giving it a region and positions nobody uses.
 
-## Known failure to watch: bank collapse
+**A vop** is a key and one matrix with a bias. The bank of vops is separate from memory for
+now (see "not built").
 
-A few entries win every lookup, the rest never get a gradient. Measured on every run: share
-of entries used at all, entropy of use, the top entry's share. Remedies to try, cheapest
-first: noise (in which entries are picked: sample from more than k, Gumbel top-k; in the
-query; in the state), query normalisation, re-seeding entries that are never used near
-queries that matched poorly.
+**One tick:**
 
-## What the first vvm got wrong, and what this keeps
+1. Fetch: the few vops whose keys are nearest the pc slot, blended by how near.
+2. Load: the memory at each read address, and at the write address. An address picks the
+   slots whose addresses are nearest, weighted by how near (a spotlight, not a point).
+3. Execute: one matmul. In: what was loaded, and the head slots as they stand. Out: a value
+   to store, the next pc, the next read addresses, the next write address. Clamped.
+4. Store: the value goes to the write address; the head slots take their next values.
 
-Measured on the original, run unchanged (thonksheet, docs/results-2026-11-25-vm-route.md):
+**One write rule** for every store, in memory or in the head: a slot moves toward what is
+written by its loudness, `slot = (1 - |c|) slot + c` with `|c|` at most 1. A quiet vop
+nudges, a loud one replaces, a silent one does nothing. No vector in the machine is ever
+longer than 1, and nothing is tuned.
 
-1. Each op was as large as the state, so the state fell onto its nearest op within two
-   ticks and the input was gone. Here: an entry is a small residual edit.
-2. There was no way to do nothing. Here: the residual default.
-3. An op was both its own address and its effect, so training it moved where it was found.
-   Here: key and value are separate.
-4. The gradient never reached which op was chosen. Here: the softmax over the retrieved few.
-5. The input barely affected the walk. Here: the input is written into the state.
+**Start and stop.** The head starts from a learned reset value, the same for every run;
+scratch and output start empty. So the first tick is the same for every input: a boot
+routine. The world decides how many ticks to run and when to read the output.
 
-## Honest limits, stated before any run
+**What is not in it:** a dense layer, an input map, a readout, vops with built-in slot
+numbers, any state outside memory. Only the pc chooses what runs; the input never does.
 
-- Entries read sparsely are worth much less per parameter than dense weights. They are
-  cheap per unit of compute. A terabyte bank is not a terabyte dense model.
-- One state vector is a bottleneck for sequences; the data memory is there to remove it.
+## Why each part is as it is (the evidence is in docs/findings.md)
 
-## Prior work this leans on
+- The vop sees the head slots because a machine that cannot see its own pointers cannot
+  step them (finding 23).
+- Several reads a tick because one 16-number load a tick starves it (finding 22).
+- The vop sets the next pc and addresses itself, not by separate stores, because the fetch
+  is the expensive part of a tick and more should be done per fetch (finding 20).
+- Soft pointers because a pointer that reads exactly one slot cannot be trained
+  (finding 26).
+- The clamp because it is as cheap as a compare; the write rule because it bounds every
+  vector without a second mechanism.
 
-- Product-key memory layers: Lample et al. 2019, "Large Memory Layers with Product Keys"
-  (arXiv 1907.05242); Berges et al. 2024, "Memory Layers at Scale" (arXiv 2412.09764): the
-  same lookup inside a transformer, up to 128 billion memory parameters, ahead of dense
-  models with more than twice the compute, most on factual tasks.
-- Sparse selection of what to compute: SLIDE (Chen et al., arXiv 1903.03129).
-- Not in those: the same bank on every tick (a walk), a run-time store with the same
-  addressing, the bank on disk behind a cache, growing and shrinking the bank.
+## Not built
+
+- One memory for vops too, so the program can write its own instructions.
+- Fetch by a bar in place of a fixed few, and growing a vop when nothing matches.
+- Halting from inside (an early form existed in version 2: old/halt.py).
+- Drivers with control slots (where to look, how far to zoom).
+- Anything of the engine: fetch by hash, 8-bit numbers, grouping runs by vop, fetching
+  ahead, the bank on disk.
+
+## The earlier forms (code in old/)
+
+1. Ops as vectors added to the state, plus a dense layer (old/vvm.py, old/bank.py). Not
+   the idea. Its product-key lookup is a real way to address a very large bank.
+2. Ops as full matrices on a state that was the input (old/vop.py). One op did everything
+   and the bank sat idle. The tree pictures, paths per digit and first halting are from it.
+3. Input and output as their own regions, flat vops reading all of memory (old/mm.py). The
+   best score for its size and most of the bank in use; no addresses at all.
+4. Memory as vectors, vops with built-in slot numbers (old/ram.py). Addresses were wired
+   in, not computed.
+5. A pc and address lanes, with the state apart from memory (old/vm.py).
+6. This one. Its first form, with image patches built in, is old/core6.py.

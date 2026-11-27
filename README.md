@@ -6,30 +6,31 @@ weights can live on disk.
 The basic operations of a computer are load, store and mutate. Here each is learned and
 fractional:
 
-- **State**: a vector, the vvm's working state and also its address into the bank.
-- **Bank of vops**: each vop is a small feed-forward layer (a matrix and a bias) with a
-  key. A tick makes an address from the state, fetches the few vops whose keys match
-  best, and applies them to the state. The result is the next state.
-- **Ticks**: the same bank on every tick, a few ticks per input, so the fetches form a walk
-  through a program. On MNIST the walks form a tree: shared vops first, branches later.
-- Nothing else computes. There is no dense layer on the state.
+- **Memory**: one list of slots, 16 numbers each, every slot with an address. The pc and the
+  read and write addresses are ordinary slots in it. The world writes some slots (input) and
+  reads others (output).
+- **Vops**: a bank of small learned ops, each a key and a matrix.
+- **A tick**: fetch the vops nearest the pc; load the memory the addresses point at; one
+  matmul gives a value to store and the next pc and addresses; store. One write rule for
+  every store: a slot moves toward what is written by its loudness.
+- Nothing else computes. There is no dense layer, no input map and no readout.
 
 Why: a large dense model cannot be cut up to run from disk, because every weight is used on
 every step. A vvm reads a handful of entries per step, so it can keep terabytes of
 weights on an SSD behind a cache, grow or shrink its bank to fit the machine it is on, and
 be walked by many workers at once.
 
-Status: the core works on the ordinary tasks (xor, a sine curve, two spirals, MNIST),
-level with an MLP of the same compute, with 4 to 16 vops. `docs/ideas.md` lists every idea
-so far; `docs/plan.md` the order of attack. Second attempt; the first
-(`vvm`, 2026) never learned, for reasons written in `docs/design.md`.
+Status: the machine (`vvm2/core.py`, `docs/design.md`) reaches 0.986 to 0.989 on MNIST
+reading the image only through addresses it computes. It is being tested on tasks that need
+steps: copying and reversing lists longer than it was trained on, and the lights game.
+`docs/findings.md` has what has been measured, `docs/ideas.md` every idea, `docs/plan.md`
+the order of attack. Five earlier forms of the machine are in `old/`. A first attempt
+(`vvm`, 2026) never learned.
 
 ```
-scripts/setup.sh        make .venv with CPU torch
-scripts/smoke.sh        every task and model, tiny, end to end
-scripts/classic.sh all  xor, a sine curve, two spirals, MNIST: the vvm against an MLP
-scripts/tree.sh         do the walks form a tree
-scripts/mm.sh class     the memory-mapped vvm: input, scratchpad and output as separate domains
-scripts/mm.sh draw      the same vvm generating digits
-scripts/halt.sh         halting: the vvm says when it is done
+scripts/setup.sh                  make .venv with CPU torch
+scripts/tape.sh copy|reverse|simon    lists and the lights game, tested longer than trained
+scripts/image.sh mnist            the machine on images, beside an MLP
+scripts/benchtick.sh              the cost of one tick on this CPU (C++)
+old/scripts/                      the scripts of the earlier forms
 ```
