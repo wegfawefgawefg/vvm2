@@ -203,4 +203,16 @@ Nothing below has been shown beyond that.
     holding back the others so every vop gets a share; an error sent one hop back when no
     gradient is to hand, for learning while running; a fresh reader of the frozen machine
     as the test of whether its inside learned anything.
+63. **Several threads in one memory** (owner: "a normal brain probably doesnt have one
+    pointer"): each thread has its own pc and pointers; all share memory and the bank.
+    They coordinate by what they leave in memory, and the write rule settles two writing
+    one slot (the louder counts for more). To watch for: all threads learning the same
+    thing, and which thread gets the credit.
+64. **Several machines, each with its own memory, that have to talk** (owner): one
+    machine's output slots are another's input slots, so to each machine the other is one
+    more device on the memory map and nothing new is needed inside the tick. The bank may
+    be shared or separate. Kinder to the hardware than idea 63 (each memory stays in its
+    own core's cache) and it forces a narrow message between parts. To compare: shared
+    memory, separate memories with a mailbox, and private memory plus a small shared
+    region.
 
