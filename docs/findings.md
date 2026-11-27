@@ -438,4 +438,30 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     pc never changes, so the loop is what happens when nothing writes its registers. The
     other three cores idle. This form still had stepping pointers and blended reads, which
     the owner did not want; it is in old/core9.py. The form after it has neither.
+51. **The agreed machine (uniform 8 by 8 slots, addresses as numbers, nothing stepping) can
+    copy a list by a program written by hand, and plain evolution finds only fixed moves.**
+    [hint: one seed a row, `scripts/evolve.sh hand`, `build/copy evolve 6000 512 0 TASK pass`]
+    The machine is vvm2/core.py and cpp/vvm.hpp: a store replaces the slot. One thread runs
+    2.1 million ticks a second with four cores (8.4 million ops a second). By hand, two
+    cores copy a list: one passes a slot from its load address to its store address, the
+    other adds a fixed amount to the first one's addresses each tick; every item right at
+    lengths 8, 16 and 24 (at 48 memory is full and the last slot is overwritten).
+
+    Evolution across a population of 512 for 6,000 generations (about 20 seconds), each
+    individual being what the first 32 slots hold at the start, program slots starting as
+    ops that pass a slot through:
+
+    | program | at the trained length | at twice the length |
+    |---|---|---|
+    | one item | 1.00 | |
+    | one item, negated | 1.00 | |
+    | lists of exactly 2 | 1.00 | 0.56 |
+    | lists of exactly 4 | 1.00 | 0.56 |
+    | lists of 1 to 8 (copy) | 0.56 at 8 | 0.34 |
+    | lists of 1 to 8, backwards | 0.13 (chance) | |
+
+    It finds one fixed move a core: four cores, four items, and no more. Nothing it found
+    does arithmetic on an address. Scoring by squared error misled the search (anything
+    imperfect in an output slot scored worse than an empty one, so it wrote nothing);
+    scoring by likeness of direction does not.
 

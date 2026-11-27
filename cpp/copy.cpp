@@ -3,7 +3,11 @@
 //
 //   cpp/copy hand            the hand-written program, scored at several lengths
 //   cpp/copy speed           ticks a second
-//   cpp/copy evolve [GENS] [POP] [SEED]
+//   cpp/copy evolve [GENS] [POP] [SEED] [TASK] [START]
+//       TASK   copy (lists of 1 to 8) | one | two | four (lists of exactly that many) |
+//              negate (one item, its negative wanted) | reverse (lists of 1 to 8, backwards)
+//       START  random (every slot random) | pass (every program slot starts as an op that
+//              passes a slot through nearly unchanged; the cores' addresses are random)
 //
 // Memory, 128 slots:   0..3  four cores      4..31  program and scratch (what evolution owns,
 //                      32..79  input (the world's)     80..127  output      with the cores)
@@ -22,6 +26,8 @@
 
 static const int N = 128, CORES = 4, OWN = 32, IN0 = 32, OUT0 = 80, CAP = 48, SYMBOLS = 8;
 static float BOOK[SYMBOLS][SLOT];
+static int LMIN = 1, LMAX = 8, SIGN = 1;
+static bool BACKWARDS = false;
 
 typedef std::vector<float> Genome;   // slots 0..31: the cores, the program, the scratch
 
@@ -34,8 +40,12 @@ static void set_up(Machine& m, const Genome& g, const int* list, int len) {
     for (int i = 0; i < len; i++) std::memcpy(m.slot(IN0 + i), BOOK[list[i]], SLOT * sizeof(float));
 }
 
-// run one list; returns the squared error of the output slots (lower is better), and counts
-// the items answered right
+// run one list; returns how far the output slots are from what was wanted (lower is better)
+// and counts the items answered right. "How far" is 1 minus the likeness of direction
+// between an output slot and the wanted grid: 0 for the wanted grid, 1 for an empty slot or
+// an unrelated one. (Squared error was tried first and misleads the search: writing anything
+// imperfect to an output slot scores worse than leaving it empty, so it learns to write
+// nothing.)
 static float run(Machine& m, const Genome& g, const int* list, int len, int* right) {
     set_up(m, g, list, len);
     for (int t = 0; t < len + 4; t++) m.tick();
@@ -46,13 +56,18 @@ static float run(Machine& m, const Genome& g, const int* list, int len, int* rig
         float best_d = 1e30f;
         for (int s = 0; s < SYMBOLS; s++) {
             float d = 0.0f;
-            for (int q = 0; q < SLOT; q++) d += (out[q] - BOOK[s][q]) * (out[q] - BOOK[s][q]);
+            for (int q = 0; q < SLOT; q++) d += (out[q] - SIGN * BOOK[s][q]) * (out[q] - SIGN * BOOK[s][q]);
             if (d < best_d) best_d = d, best = s;
-            if (s == list[i]) err += d;
         }
-        if (right) *right += best == list[i];
+        {
+            const float* want = BOOK[list[BACKWARDS ? len - 1 - i : i]];
+            float dot = 0.0f, a = 0.0f, b = 0.0f;
+            for (int q = 0; q < SLOT; q++) dot += out[q] * SIGN * want[q], a += out[q] * out[q], b += want[q] * want[q];
+            err += 1.0f - (a > 1e-12f ? dot / std::sqrt(a * b) : 0.0f);
+        }
+        if (right) *right += best == list[BACKWARDS ? len - 1 - i : i];
     }
-    return err / (float)(len * SLOT);
+    return err / (float)len;
 }
 
 static Genome by_hand() {
@@ -77,7 +92,7 @@ static void report(const Genome& g, const char* name, unsigned seed) {
     Machine m;
     std::mt19937 rng(seed);
     std::printf("%s: share of items right / share of whole lists right\n", name);
-    for (int len : {8, 16, 24, 48}) {
+    for (int len : {LMAX, 2 * LMAX, 48}) {
         int right = 0, whole = 0, lists = 500;
         for (int k = 0; k < lists; k++) {
             int list[CAP], r = 0;
@@ -117,22 +132,32 @@ int main(int argc, char** argv) {
     // evolution across a population: each individual is what slots 0..31 hold at the start
     const int gens = argc > 2 ? std::atoi(argv[2]) : 2000, pop = argc > 3 ? std::atoi(argv[3]) : 512;
     const unsigned seed = argc > 4 ? (unsigned)std::atoi(argv[4]) : 0;
+    const std::string task = argc > 5 ? argv[5] : "copy", start = argc > 6 ? argv[6] : "random";
+    if (task == "one") LMIN = LMAX = 1;
+    if (task == "two") LMIN = LMAX = 2;
+    if (task == "four") LMIN = LMAX = 4;
+    if (task == "negate") LMIN = LMAX = 1, SIGN = -1;
+    if (task == "reverse") BACKWARDS = true;
     const int keep = pop / 4, lists = 16;
     std::mt19937 rng(seed);
     std::vector<Genome> people((size_t)pop, Genome((size_t)OWN * SLOT));
     for (auto& g : people) {
         std::uniform_real_distribution<float> w(-0.5f, 0.5f), a(0.0f, 1.0f);
         for (auto& x : g) x = w(rng);
+        if (start == "pass")
+            for (int sl = CORES; sl < OWN; sl++)
+                for (int q = 0; q < SLOT; q++) g[(size_t)sl * SLOT + q] = (q / SIDE == q % SIDE ? 1.0f : 0.0f) + 0.1f * w(rng);
         for (int c = 0; c < CORES; c++) for (int k = 0; k < 3; k++) g[(size_t)c * SLOT + k] = a(rng);
     }
     std::vector<float> score((size_t)pop);
     std::vector<int> order((size_t)pop);
-    std::printf("evolving copy: %d individuals, %d generations, seed %u; lists of 1 to 8 items; "
-                "each individual is %d numbers\n", pop, gens, seed, OWN * SLOT);
+    std::printf("evolving %s (start: %s): %d individuals, %d generations, seed %u; lists of %d to %d "
+                "items; each individual is %d numbers\n", task.c_str(), start.c_str(), pop, gens, seed,
+                LMIN, LMAX, OWN * SLOT);
     for (int gen = 0; gen <= gens; gen++) {
         int batch[16][CAP], lens[16];
         for (int k = 0; k < lists; k++) {
-            lens[k] = 1 + (int)(rng() % 8);
+            lens[k] = LMIN + (int)(rng() % (LMAX - LMIN + 1));
             for (int i = 0; i < lens[k]; i++) batch[k][i] = (int)(rng() % SYMBOLS);
         }
 #pragma omp parallel
