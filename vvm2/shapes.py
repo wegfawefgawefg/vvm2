@@ -39,6 +39,7 @@ from .common import TASKS, mlp_matched, params
 from .core import SLOT, Core
 
 NAMES = ["circle", "square", "triangle"]
+IMG = os.environ.get("IMAGE_PICTURES", "docs/img")       # --quick writes elsewhere
 
 
 def draw_shapes(kind, filled, r, cx, cy):
@@ -235,7 +236,7 @@ def run_draw(steps, opt):
     rows = [[test[1][i], made["vvm"][i], made["whole"][i], made["mlp"][i]] for i in range(8)]
     sheet(list(map(list, zip(*rows))), "Drawing a named shape. Rows: asked for; the vvm as "
           "trained; the vvm run with whole steps; an MLP of the same size.",
-          "docs/img/shapes-drawn.png")
+          IMG + "/shapes-drawn.png")
 
 
 def run_gen(task, steps, opt):
@@ -285,11 +286,11 @@ def run_gen(task, steps, opt):
                 rows.append(list(pixel_error(model, torch.cat(new), tx[:10], hard=hard)[1]))
     sheet(rows, "Generated %s: a column a class. Row 1: a real image. Rows 2 to 4: the vvm "
           "from a class and random style numbers. Row 5: the vvm run with whole steps. "
-          "Rows 6 to 8: an MLP of the same size." % task, "docs/img/generated-%s.png" % task)
+          "Rows 6 to 8: an MLP of the same size." % task, "%s/generated-%s.png" % (IMG, task))
 
 
 if __name__ == "__main__":
-    torch.set_num_threads(4)
+    torch.set_num_threads(int(os.environ.get("IMAGE_THREADS", 4)))
     what = sys.argv[1] if len(sys.argv) > 1 else "draw"
     opt = dict(a.split("=") for a in sys.argv[2:] if "=" in a)
     steps = next((int(a) for a in sys.argv[2:] if a.isdigit()), 2000)

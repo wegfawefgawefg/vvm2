@@ -8,7 +8,9 @@
 #   scripts/image.sh class mnist 3000 tune=1000  and then 1000 steps taught with whole steps
 #   scripts/image.sh look mnist seed=0           where the pointers go: text, and a picture in
 #                                                docs/img/ (needs the class run first;
-#                                                tuned=1 for the machine tune= saved)
+#                                                which=tuned or which=mix for the machine a
+#                                                run with tune= or mix= saved)
+#   scripts/image.sh class shapes 1500 mix=0.5   half the training passes run with whole steps
 #   scripts/image.sh draw 2000                   draw a named shape onto a 49-slot canvas
 #   scripts/image.sh gen fashion 2000            generate clothes and bags from a class and
 #                                                8 style numbers
@@ -16,7 +18,8 @@
 #   scripts/image.sh --quick                     everything above, tiny, end to end
 # Options after the steps: seed=0 ops=128 ticks=12 reads=4 scratch=8 mlp=1 (class);
 # seed=0 ops=64 reads=2 ruler=1 (draw, gen). Data: scripts/get_mnist.sh, scripts/get_data.sh
-# kmnist, scripts/get_data.sh fashion (fetched here if missing). 4 threads, nice 19.
+# kmnist, scripts/get_data.sh fashion (fetched here if missing). nice 19; 4 threads, or
+# IMAGE_THREADS=1 scripts/image.sh ... for one (faster in total when the CPU is shared).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -x .venv/bin/python ] || scripts/setup.sh
@@ -34,12 +37,13 @@ case "$what" in
 --quick)
     need mnist
     need fashion
-    $py -m vvm2.image class mnist 30 ticks=6 ops=16 tune=10
-    $py -m vvm2.image look mnist
-    $py -m vvm2.image look mnist tuned=1
-    $py -m vvm2.image class shapes 30 ticks=6 ops=16
-    $py -m vvm2.shapes draw 10 ops=8
-    $py -m vvm2.shapes gen fashion 10 ops=8
+    export IMAGE_PICTURES=out/image/quick      # seed 99 and this folder: nothing real is
+    $py -m vvm2.image class mnist 30 ticks=6 ops=16 tune=10 seed=99      # written over
+    $py -m vvm2.image look mnist seed=99
+    $py -m vvm2.image look mnist seed=99 which=tuned
+    $py -m vvm2.image class shapes 30 ticks=6 ops=16 mix=0.5 seed=99
+    $py -m vvm2.shapes draw 10 ops=8 seed=99
+    $py -m vvm2.shapes gen fashion 10 ops=8 seed=99
     ;;
 class | look)
     need "${2:-mnist}"
@@ -56,7 +60,7 @@ gen)
     $py -m vvm2.shapes "$@"
     ;;
 *)
-    sed -n '2,20p' "$0"
+    sed -n '2,23p' "$0"
     exit 1
     ;;
 esac

@@ -3,6 +3,8 @@
   python -m vvm2.image class TASK [STEPS]   classify mnist | kmnist | fashion | shapes
   python -m vvm2.image look TASK            the look inside for the machine `class` saved:
                                             where the read pointers go, as text and a picture
+                                            (which=mix, which=tuned: the machine saved by a
+                                            run with mix= or tune=)
   python -m vvm2.image time                 seconds a training step, nothing scored
   options after STEPS:  seed=0  ops=128  ticks=12  reads=4  scratch=8  mlp=1 (0 skips the MLP)
                         tune=0  further training steps run with whole steps (see `tune`)
@@ -271,7 +273,7 @@ def classify(task, steps, opt):
         print(row, flush=True)
     os.makedirs("out/image", exist_ok=True)
     torch.save({"state": vm.state_dict(), "outputs": outputs, "ticks": vm.ticks, "core": core},
-               saved(task, seed))
+               saved(task + ("-mix" if mix else ""), seed))
     held_out(tests, "vvm", vm)
     if int(opt.get("tune", 0)):
         tune(vm, data, int(opt["tune"]), seed, shift)
@@ -279,7 +281,7 @@ def classify(task, steps, opt):
         for row in rows(vm, data, label):
             print(row, flush=True)
         torch.save({"state": vm.state_dict(), "outputs": outputs, "ticks": vm.ticks,
-                    "core": core}, saved(task + "-tuned", seed))
+                    "core": core}, saved(task + ("-mix" if mix else "") + "-tuned", seed))
         held_out(tests, label, vm)
     if opt.get("mlp", "1") == "1":
         mlp = mlp_matched(784, outputs, params(vm))
@@ -316,17 +318,17 @@ def timing(opt):
     adam = torch.optim.AdamW(vm.parameters(), lr=1e-3)
     x, y = torch.rand(128, 784), torch.randint(10, (128,))
     start = time.time()
-    for _ in range(10):
+    for _ in range(20):
         loss = nn.functional.cross_entropy(vm(x), y)
         adam.zero_grad()
         loss.backward()
         adam.step()
     print("%d weights, %d multiply-adds an image, %.3f seconds a step" % (
-        params(vm), vm.madds(), (time.time() - start) / 10))
+        params(vm), vm.madds(), (time.time() - start) / 20))
 
 
 if __name__ == "__main__":
-    torch.set_num_threads(4)
+    torch.set_num_threads(int(os.environ.get("IMAGE_THREADS", 4)))
     what = sys.argv[1] if len(sys.argv) > 1 else "class"
     task = sys.argv[2] if len(sys.argv) > 2 else "mnist"
     opt = dict(a.split("=") for a in sys.argv[3:] if "=" in a)
@@ -335,6 +337,6 @@ if __name__ == "__main__":
         timing(dict(a.split("=") for a in sys.argv[2:] if "=" in a))
     elif what == "look":
         from .look import look
-        look(task, int(opt.get("seed", 0)), opt.get("tuned", "0") == "1")
+        look(task, int(opt.get("seed", 0)), opt.get("which", ""))
     else:
         classify(task, steps, opt)

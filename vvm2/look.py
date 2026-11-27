@@ -1,6 +1,6 @@
 """A look inside a trained image classifier: where the read pointers go.
 
-  python -m vvm2.image look TASK [seed=0] [tuned=1]
+  python -m vvm2.image look TASK [seed=0] [which=tuned | which=mix]
 
 Loads the machine `python -m vvm2.image class TASK` saved, runs it with whole steps (every
 pointer on one slot) and prints, for a few test images, a trace: at each tick the vop, the
@@ -15,6 +15,7 @@ import torch
 
 from .image import FINE0, N_IN, STEPS, box, get_data, load, masses, paths
 
+IMG = os.environ.get("IMAGE_PICTURES", "docs/img")       # --quick writes elsewhere
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]       # one a read pointer
 
 
@@ -226,11 +227,13 @@ def picture(vm, x, y, path, n=4):
     print("  wrote %s" % path)
 
 
-def look(task, seed=0, tuned=False):
-    vm = load(task + "-tuned" if tuned else task, seed)
+def look(task, seed=0, which=""):
+    tag = "-" + which if which else ""
+    vm = load(task + tag, seed)
     data = get_data(task, seed)
     tx, ty = data[2], data[3]
-    print("look inside: %s, seed %d%s" % (task, seed, ", taught with whole steps" if tuned else ""))
+    print("look inside: %s, seed %d%s" % (task, seed, ", the machine saved as " + which if which
+                                         else ""))
     start = torch.softmax(vm.core.boot_at.detach(), dim=-1)
     ends = ["first input slot (the whole image)", "last input slot", "first scratch slot",
             "last scratch slot", "the output slot", "the output slot"]
@@ -248,6 +251,6 @@ def look(task, seed=0, tuned=False):
     print(" traces, run with whole steps (W the whole image, C12 coarse row 1 column 2, F35 "
           "fine row 3 column 5, s scratch, out the output slot):")
     trace_text(vm, tx, ty)
-    picture(vm, tx, ty, "docs/img/look-%s%s.png" % (task, "-tuned" if tuned else ""))
+    picture(vm, tx, ty, "%s/look-%s%s.png" % (IMG, task, tag))
     vm.core.hard = False
-    blend_picture(vm, tx, ty, "docs/img/look-%s%s-blend.png" % (task, "-tuned" if tuned else ""))
+    blend_picture(vm, tx, ty, "%s/look-%s%s-blend.png" % (IMG, task, tag))

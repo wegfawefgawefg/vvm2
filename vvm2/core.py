@@ -129,7 +129,14 @@ class Core(nn.Module):
             sc, idx = (pc @ self.keys.T).topk(self.k, dim=-1)                 # fetch
             mix = torch.softmax(sc, dim=-1)
             got = torch.cat([torch.einsum("bps,bsd->bpd", at, mem).flatten(1), mem[:, 0]], dim=1)
-            out = torch.einsum("bkij,bj->bki", self.m[idx], got) + self.bias[idx]   # execute
+            # execute. Runs in a batch mostly fetch the same few vops, so each vop that
+            # anyone fetched is applied once to the whole batch (one plain matmul) and every
+            # run then takes its own k results. Same numbers as applying m[idx] run by run.
+            uniq, inv = idx.unique(return_inverse=True)
+            fan_in = got.shape[1]
+            every = (self.m[uniq].reshape(-1, fan_in) @ got.T).view(len(uniq), self.fan_out, n)
+            every = every.permute(2, 0, 1) + self.bias[uniq]                  # [B, U, fan_out]
+            out = every.gather(1, inv.unsqueeze(-1).expand(-1, -1, self.fan_out))
             vec = torch.einsum("bk,bki->bi", mix, F.hardtanh(out[..., :2 * SLOT]))
             ptrs = self.reads + 1
             moves = out[..., 2 * SLOT:2 * SLOT + ptrs * self.steps]
