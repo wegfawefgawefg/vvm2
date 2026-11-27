@@ -65,6 +65,16 @@ def move(slot, c, share=None):
     return (1 - c.norm(dim=-1, keepdim=True)) * slot + c
 
 
+def choose(p, draw, through):
+    """p [..., n], shares that sum to 1 -> exactly one of them. draw: pick one at random by
+    its share, otherwise the largest. through: the gradient passes as if the shares
+    themselves had been used (straight through)."""
+    flat = p.reshape(-1, p.shape[-1])
+    i = torch.multinomial(flat, 1).squeeze(1) if draw else flat.argmax(dim=-1)
+    hot = F.one_hot(i, p.shape[-1]).float().view_as(p)
+    return hot + p - p.detach() if through else hot
+
+
 class Core(nn.Module):
     def __init__(self, scratch=32, ops=128, k=4, reads=2, seek_self=False, moves=2):
         super().__init__()
@@ -87,6 +97,10 @@ class Core(nn.Module):
         self.trace, self.exact = None, None
         self.hard = False   # running, not training: every pointer takes its likeliest step
                             # whole, so pointers are single slots and stay so at any length
+        self.draw = False   # a switch under test: pointers are exact in training too. While
+                            # learning, each pointer takes one move drawn by its shares and
+                            # the gradient passes straight through; when running it takes
+                            # the likeliest. The machine trained is then the machine run.
 
     def forward(self, world, ticks, n_out, trace=False, go=None):
         """Run for `ticks` ticks.
@@ -122,10 +136,12 @@ class Core(nn.Module):
         can_write[1:1 + n_in] = 0
         mem = torch.cat([self.boot_pc.expand(n, 1, -1), first,
                          first.new_zeros(n, self.scratch + n_out, SLOT)], dim=1)
-        start = torch.softmax(self.boot_at, dim=-1)
-        if self.hard and not self.training:
-            start = F.one_hot(start.argmax(dim=-1), 6).float()
-        at = (start @ anchors).expand(n, -1, -1)                             # [B, P, slots]
+        start = torch.softmax(self.boot_at, dim=-1).expand(n, -1, -1)
+        learn = self.draw and self.training
+        whole = self.draw or (self.hard and not self.training)
+        if whole:
+            start = choose(start, learn, learn)
+        at = start @ anchors                                                 # [B, P, slots]
         outs, log, exact = [], [], []
         for t in range(ticks):
             if callable(world) and t > 0:                 # the world rewrites its slots
@@ -159,10 +175,10 @@ class Core(nn.Module):
             twin = self.seek_sharp * (mine @ F.normalize(mem, dim=-1).transpose(1, 2)) - 30.0 * at
             twin = torch.softmax(twin.masked_fill(place == 0, float("-inf")), dim=-1)
             step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, steps]
-            if self.hard and not self.training:
-                step = F.one_hot(step.argmax(dim=-1), self.steps).float()
-                found = F.one_hot(found.argmax(dim=-1), slots).float()
-                twin = F.one_hot(twin.argmax(dim=-1), slots).float()
+            if whole:
+                step = choose(step, learn, learn)
+                found = choose(found, False, learn)
+                twin = choose(twin, False, learn)
             write = at[:, -1]
             mem = move(mem, vec[:, None, :SLOT], (write * can_write).unsqueeze(-1))   # store
             mem = torch.cat([move(mem[:, :1], vec[:, None, SLOT:]), mem[:, 1:]], dim=1)

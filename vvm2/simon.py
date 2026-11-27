@@ -2,7 +2,7 @@
 
     python -m vvm2.simon [STEPS] [hold=1 lag=1 max=6 colours=4 scratch=64 ops=128 seed=0
                                   gru=1 threads=1 mix=0 loop=0
-                                  before=0]
+                                  before=0 grow=0 draw=0]
 
 The world owns two input slots and reads one output slot:
 
@@ -21,6 +21,10 @@ loop=1 starts every vop with a silent next-pc, so the pc stays where it is and t
 vops run again until one learns to jump: looping is the default and jumping is learned.
 before=2000 has the same machine learn to copy lists for that many steps first, then the
 lights game; copy is scored before and after, to see what is kept.
+draw=1 keeps the pointers exact while training as well: each pointer takes one move drawn
+by its shares, the gradient passing straight through (the switch `draw` in vvm2/core.py).
+grow=1 is a curriculum of data: games of 1 to 2 lights at first, the longest game growing
+to `max` by 60% of the way through training.
 mix=1 trains on two runs of every batch, one as usual and one with whole steps, and adds
 the two losses.
 
@@ -150,10 +154,11 @@ def score(model, tests, g, colours):
 
 
 def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=0, gru=True,
-        threads=1, mix=False, loop=False, before=0):
+        threads=1, mix=False, loop=False, before=0, grow=False, draw=False):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
     vm = SimonVM(colours, hold, lag, scratch=scratch, ops=ops, k=min(4, ops))
+    vm.core.draw = draw
     if loop:   # every vop starts out leaving the pc alone, so the same vops come round
         with torch.no_grad():   # again until one learns to jump: a loop is the default
             vm.core.m[:, SLOT:2 * SLOT] = 0
@@ -166,7 +171,9 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=
           "/ share of whole games right%s" % (
               colours, hold, "" if hold == 1 else "s", lag, "" if lag == 1 else "s", most,
               steps, seed, (". Trained on the run with whole steps too" if mix else "")
-              + (". Vops start out leaving the pc alone" if loop else "")))
+              + (". Vops start out leaving the pc alone" if loop else "")
+              + (". The longest game grows from 2" if grow else "")
+              + (". Pointers exact in training too, moves drawn" if draw else "")))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     if before:   # the same machine learns to copy lists first (lengths 2 to 8)
@@ -197,7 +204,8 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=
                 print("    step %d: loss %.3f; with whole steps, lengths %s: %s" % (
                     step, loss.item(), ", ".join(str(t) for t in tests[:2]), whole), flush=True)
             model.train()
-            length = int(torch.randint(1, most + 1, (1,), generator=g))
+            top = most if not grow else min(most, 2 + int((most - 2) * step / (0.6 * steps)))
+            length = int(torch.randint(1, top + 1, (1,), generator=g))
             x = torch.randint(colours, (64, length), generator=g)
             loss = F.cross_entropy(model(x).reshape(-1, colours), x.reshape(-1))
             if mix and name == "vvm":   # the same batch run with whole steps as well: the
@@ -232,4 +240,5 @@ if __name__ == "__main__":
         lag=int(a.get("lag", 1)), most=int(a.get("max", 6)), colours=int(a.get("colours", 4)),
         scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 128)), seed=int(a.get("seed", 0)),
         gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1",
-        before=int(a.get("before", 0)))
+        before=int(a.get("before", 0)), grow=a.get("grow", "0") == "1",
+        draw=a.get("draw", "0") == "1")
