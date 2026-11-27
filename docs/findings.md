@@ -273,4 +273,36 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     sends both pointers to the far end and copies backwards. One reverse reads from the end
     and writes from the start; another reads from the start and writes from the end; a
     third makes a false start of two items, goes back to the beginning and does it properly.
+38. **The current machine fits ordinary curves as well as an MLP, but only with blurred
+    pointers, unless it is also trained on the exact run.** [solid: 3 seeds,
+    `scripts/curves.sh`, docs/results-2026-11-27-curves-control.md] Bank of 16, 4 ticks,
+    the same weights as the MLP beside it.
+
+    | task | as trained | the same weights, whole steps | trained on the whole-step run too, whole steps | MLP |
+    |---|---|---|---|---|
+    | xor, noisy test points | 0.972 | 0.791 | 0.942 | 0.998 |
+    | a sine, squared error | 0.00002 | 0.452 | 0.00002 | under 0.000005 |
+    | two spirals | 1.000 | 0.555 | 0.985 | 1.000 |
+
+    A curve gives the pointers nothing to do, so they stay blurred and the fit leans on the
+    blur. Running every batch twice, once as usual and once with whole steps, and adding
+    the two losses (`mix=1`) closes the gap. Nothing in the machine changes.
+39. **It balances a pole, trained with no labels, and brings nothing an MLP does not.**
+    [solid for "it balances": 6 of 6 runs, `scripts/control.sh`] Trained by an evolution
+    strategy with whole steps, forward only: 500 of 500 steps on 100 of 100 test episodes
+    every time. It took about 9,700 episodes of experience against 3,300 for an MLP of the
+    same weights and 5,300 for a GRU (settings not tuned for any of them). It does half the
+    multiply-adds a step of that MLP. The trained machine parks its pointers and runs one
+    vop: a reflex with a little memory in the pc slot. Scratch is never used.
+40. **The lights game fits in the machine: two vops written by hand play any length and any
+    hold.** [solid: exact, `python -m vvm2.simon_hand`] One vop stores the light and steps
+    the write pointer while the signal says watch, and on "play" rewinds the read pointer,
+    sends the write pointer to the button and jumps the pc; the other copies scratch to the
+    button and steps. Every game right at 6 to 48 lights and 1 to 8 ticks a light. So
+    nothing is missing from the design, the conditional jump included; what fails is
+    training finding the routine. Trained from scratch it puts each light at a fixed
+    landmark (a region end) with a different vop each tick, which is exact for three or
+    four lights and cannot grow. The earlier form of the task with one tick a light was
+    also unfair: it wanted the first answer on the tick the machine first saw "play",
+    before a pointer could move; `vvm2/simon.py` gives one tick of reaction time.
 
