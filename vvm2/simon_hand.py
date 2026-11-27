@@ -1,6 +1,7 @@
 """The lights game programmed by hand: two vops, weights written here, nothing trained.
 
     python -m vvm2.simon_hand
+    python -m vvm2.simon_hand noise=0.3 steps=1500    does training keep it? (see settle)
 
 This answers one question: does the routine fit in the machine as it is? The program is a
 tape recorder.
@@ -61,8 +62,52 @@ def program(vm):
         core.bias[P, want(2, STAY)] = LOUD
 
 
+def settle(noise, steps, most=6, seed=0):
+    """Does training keep the routine? The two vops go into a bank of 128; every weight then
+    gets random noise, `noise` times the size an untrained machine starts with; then it is
+    trained as usual on games of 1 to `most` lights."""
+    torch.manual_seed(seed)
+    vm = SimonVM(4, 1, 1, scratch=64, ops=128, k=4)
+    program(vm)
+    with torch.no_grad():
+        for w, size in ((vm.core.m, 0.125), (vm.core.bias, 0.1), (vm.core.keys, 0.25)):
+            w.add_(torch.randn_like(w) * size * noise)
+    tests, g = (6, 12, 24, 48), torch.Generator().manual_seed(seed)
+
+    def both(when):
+        vm.eval()
+        soft = score(vm, tests, torch.Generator().manual_seed(9), 4)
+        vm.core.hard = True
+        hard = score(vm, tests, torch.Generator().manual_seed(9), 4)
+        vm.core.hard = False
+        print("| %s, as trained | %s |\n| %s, whole steps | %s |" % (when, soft, when, hard),
+              flush=True)
+
+    print("the hand routine in a bank of 128 with noise %.2f, then %d training steps on games "
+          "of 1 to %d lights" % (noise, steps, most))
+    print("| when | " + " | ".join("length %d" % t for t in tests) + " |\n|---|---|---|---|---|")
+    both("noise added")
+    opt = torch.optim.AdamW(vm.parameters(), lr=5e-4, weight_decay=0.01)
+    for step in range(steps):
+        vm.train()
+        x = torch.randint(4, (64, int(torch.randint(1, most + 1, (1,), generator=g))), generator=g)
+        loss = F.cross_entropy(vm(x).reshape(-1, 4), x.reshape(-1))
+        opt.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(vm.parameters(), 1.0)
+        opt.step()
+        if step % max(1, steps // 4) == 0:
+            print("    step %d: loss %.3f" % (step, loss.item()), flush=True)
+    both("after training")
+
+
 if __name__ == "__main__":
+    import sys
     torch.set_num_threads(1)
+    a = dict(s.split("=") for s in sys.argv[1:])
+    if "noise" in a:
+        settle(float(a["noise"]), int(a.get("steps", 1500)))
+        sys.exit()
     print("the lights game by hand: two vops, nothing trained. Share of lights right / share "
           "of whole games right, run with whole steps")
     print("| ticks a light | length 6 | length 12 | length 24 | length 48 |")
