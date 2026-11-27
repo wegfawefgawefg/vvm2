@@ -7,6 +7,8 @@
   python -m vvm2.tape lookup  [STEPS]     find a value by its key among 2 to 6 pairs, tested on
                                           up to 24: needs a move by content, then one by position
   options after STEPS:  ops=8   the size of the bank       gru=0   skip the GRU
+                        seed=1  another seed
+                        hold=1  simon: ticks a light is lit (2 unless said)
 
 Lists: the world puts the list one item a slot in the input region and reads the answer
 from as many output slots. An item is one of 8 symbols, each a fixed vector of 16 numbers
@@ -119,12 +121,12 @@ class LookupGRU(nn.Module):
         return self.out(y[:, -1])
 
 
-def run_lookup(steps, ops=128, only_vvm=False, grow=False, seek_self=False):
+def run_lookup(steps, ops=128, only_vvm=False, grow=False, seek_self=False, seed=0):
     """grow: a curriculum of data: one pair at first, more as training goes on, up to six
     by 60% of the way. seek_self: the machine has the extra step "go to another slot like
     the one I am on"."""
     torch.set_num_threads(8)
-    torch.manual_seed(0)
+    torch.manual_seed(seed)
     vm = LookupVM(ops=ops, k=min(4, ops), seek_self=seek_self)
     gru = LookupGRU(sized(lambda w: LookupGRU(w), params(vm)))
     tests = (6, 12, 24)
@@ -136,7 +138,7 @@ def run_lookup(steps, ops=128, only_vvm=False, grow=False, seek_self=False):
     for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
         sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
-        g = torch.Generator().manual_seed(0)
+        g = torch.Generator().manual_seed(seed)
         for step in range(steps):
             model.train()
             most = 1 + int(5 * min(1.0, step / (0.6 * steps))) if grow else 6
@@ -249,7 +251,7 @@ def show_trace(vm, task, x):
     sys.stdout.flush()
 
 
-def run(task, steps, ops=128, only_vvm=False):
+def run(task, steps, ops=128, only_vvm=False, seed=0):
     torch.set_num_threads(8)
     simon = task == "simon"
     kinds = COLOURS if simon else SYMBOLS
@@ -259,18 +261,20 @@ def run(task, steps, ops=128, only_vvm=False):
         logits = model.simon(x) if simon else model.lists(x)
         return logits, (x.flip(1) if task == "reverse" else x)
 
-    torch.manual_seed(0)
+    torch.manual_seed(seed)
     vm = TapeVM(ops=ops, k=min(4, ops))
     make = (lambda w: SimonGRU(w)) if simon else (lambda w: ListGRU(w))
     gru = make(sized(make, params(vm)))
-    print("%s: trained on lengths %d to %d, %d steps, a bank of %d vops. In each cell: share "
-          "of items right / share of whole sequences right" % (task, short[0], short[1], steps, ops))
+    print("%s: trained on lengths %d to %d, %d steps, a bank of %d vops%s. In each cell: share "
+          "of items right / share of whole sequences right" % (
+              task, short[0], short[1], steps, ops,
+              ", %d tick%s a light" % (HOLD, "" if HOLD == 1 else "s") if simon else ""))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
         sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
-        g = torch.Generator().manual_seed(0)
+        g = torch.Generator().manual_seed(seed)
         for _ in range(steps):
             model.train()
             length = int(torch.randint(short[0], short[1] + 1, (1,), generator=g))
@@ -310,11 +314,14 @@ def run(task, steps, ops=128, only_vvm=False):
 
 if __name__ == "__main__":
     extra = dict(a.split("=") for a in sys.argv[3:])
+    HOLD = int(extra.get("hold", HOLD))   # ticks each light is lit, and between button reads
     if len(sys.argv) > 1 and sys.argv[1] == "lookup":
         run_lookup(int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
                    ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0",
-                   grow=extra.get("grow", "0") == "1", seek_self=extra.get("twin", "0") == "1")
+                   grow=extra.get("grow", "0") == "1", seek_self=extra.get("twin", "0") == "1",
+                   seed=int(extra.get("seed", 0)))
         sys.exit()
     run(sys.argv[1] if len(sys.argv) > 1 else "copy",
         int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
-        ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0")
+        ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0",
+        seed=int(extra.get("seed", 0)))

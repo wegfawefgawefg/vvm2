@@ -266,4 +266,11 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     content followed by a move by position. Without the built-in step it gets every answer
     right as trained but leans on blended pointers (0.77 with whole steps). The curriculum
     of data, as tried here, did not help.
+37. **Copy and reverse hold on three seeds, and each seed writes a different program.**
+    [solid: 3 seeds each, `scripts/tape.sh copy 3000 seed=N`] Run with whole steps, every
+    item and every whole list is right at every length from 8 to 96 on all three seeds of
+    both tasks (trained on 2 to 8). One copy starts at the front and steps forward; another
+    sends both pointers to the far end and copies backwards. One reverse reads from the end
+    and writes from the start; another reads from the start and writes from the end; a
+    third makes a false start of two items, goes back to the beginning and does it properly.
 
