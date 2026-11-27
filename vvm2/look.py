@@ -115,7 +115,8 @@ def blend_counts(vm, x):
           "%.3f at the same places on another image, %.3f over a whole image" % (
               own, other, x.mean()))
     moved = (mass - mass.mean(0, keepdim=True)).abs().sum(1).mean() / mass.sum(1).mean()
-    print("  share of the blend that is somewhere else than on the average image: %.2f" % (moved / 2))
+    print("  share of the blend that is somewhere else than on the average image: %.2f" % (
+        moved / 2))
 
 
 def blend_picture(vm, x, y, path, n=4):
