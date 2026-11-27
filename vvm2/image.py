@@ -127,6 +127,8 @@ def paths(vm, x):
     slots = 1 + N_IN + core.scratch + 1
     ends = [1, N_IN, 1 + N_IN, N_IN + core.scratch, slots - 1, slots - 1]
     start = torch.softmax(core.boot_at, dim=-1)      # the same sum the core makes
+    if core.hard:
+        start = nn.functional.one_hot(start.argmax(dim=-1), ANCHORS).float()
     at0 = start @ nn.functional.one_hot(torch.tensor(ends), slots).float()
     places = [at0.argmax(dim=-1).expand(len(x), -1)] + [t[1].argmax(dim=-1) for t in core.trace]
     return (torch.stack([t[0] for t in core.trace]), torch.stack(places[:-1]),
@@ -152,7 +154,8 @@ def looked(vm, x):
     _, places, _ = paths(vm, x)
     at = places[:, :, :vm.core.reads] - 1                      # input slot numbers
     seen = torch.zeros(len(x), N_IN + vm.core.scratch + 1)
-    seen.scatter_(1, at.permute(1, 0, 2).flatten(1).clamp(min=0), 1.0)
+    at = torch.where(at < 0, torch.full_like(at, N_IN + vm.core.scratch), at)   # the pc: off
+    seen.scatter_(1, at.permute(1, 0, 2).flatten(1), 1.0)
     seen = seen[:, :N_IN]
     return (seen.sum(1).mean().item(), seen[:, 0].mean().item(),
             seen[:, COARSE0:FINE0].sum(1).mean().item(), seen[:, FINE0:].sum(1).mean().item())
@@ -238,29 +241,33 @@ def classify(task, steps, opt):
     os.makedirs("out/image", exist_ok=True)
     torch.save({"state": vm.state_dict(), "outputs": outputs, "ticks": vm.ticks, "core": core},
                saved(task, seed))
-    extra = [("vvm", vm)]
+    held_out(tests, "vvm", vm)
     if int(opt.get("tune", 0)):
         tune(vm, data, int(opt["tune"]), seed, shift)
-        for row in rows(vm, data, "vvm, then %s steps taught with whole steps" % opt["tune"]):
+        label = "vvm, then %s steps taught with whole steps" % opt["tune"]
+        for row in rows(vm, data, label):
             print(row, flush=True)
         torch.save({"state": vm.state_dict(), "outputs": outputs, "ticks": vm.ticks,
                     "core": core}, saved(task + "-tuned", seed))
+        held_out(tests, label, vm)
     if opt.get("mlp", "1") == "1":
         mlp = mlp_matched(784, outputs, params(vm))
         mfit, mtest, msecs = train(mlp, data, steps, 128, 3e-3, seed, wd=0.05, shift=shift)
         print("| mlp | %d | %d | %.4f | %.4f | | | | | | |" % (
             params(mlp), mlp.madds_total(), mfit, mtest), flush=True)
-        extra.append(("mlp", mlp))
+        held_out(tests, "mlp", mlp)
     print("  seconds of training: vvm %.0f" % secs, flush=True)
-    for name, (hx, hy) in tests.items():       # held-out tests, for shapes
-        cells = []
-        for label, model in extra:
-            cells.append("%s %.4f" % (label, score(model, hx, hy, "class")))
-            if label == "vvm":
-                vm.core.hard = True
-                cells.append("vvm with whole steps %.4f" % score(vm, hx, hy, "class"))
-                vm.core.hard = False
-        print("  held out, %s: %s" % (name, ", ".join(cells)), flush=True)
+
+
+def held_out(tests, label, model):
+    """Scores on the held-out tests (shapes): sizes and places not trained on."""
+    for name, (hx, hy) in tests.items():
+        line = "  held out, %s: %s %.4f" % (name, label, score(model, hx, hy, "class"))
+        if hasattr(model, "core"):
+            model.core.hard = True
+            line += "; run with whole steps %.4f" % score(model, hx, hy, "class")
+            model.core.hard = False
+        print(line, flush=True)
 
 
 def load(task, seed):
