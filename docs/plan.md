@@ -14,10 +14,9 @@ It learns routines that carry beyond what it was trained on.
 **The battery: find where the limits are.** Each is its own task file on the one core, with
 a plain net beside it, tested beyond what it trained on, run with whole steps, with a trace.
 
-- *(running)* Images through pointers that move on a grid and zoom between a coarse and a
-  fine copy: MNIST, Kuzushiji, Fashion; circles, squares and triangles of any size and
-  place, named and then drawn; generating clothes and bags, later dogs (needs colour and
-  another data set).
+- *(done as far as it goes)* Images through pointers that move on a grid and zoom (finding
+  44): shapes carry to unseen sizes and places as trained, by blurred pointers; whole steps
+  fail. Not run: drawing shapes, generating clothes and bags, a compute-matched baseline.
 - *(running)* Cellular automata: one-line rules, then Conway's, learned on small boards and
   run on larger ones.
 - *(done as far as it goes)* Algorithms and conditionals (findings 41 to 43): plain loops

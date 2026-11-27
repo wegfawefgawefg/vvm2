@@ -335,4 +335,24 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     [hint] Shift and the copy-or-reverse task both become exact at length 64 when the
     move by content is held off (finding 41, 42), and the lookup that worked best used the
     built-in "another slot like this one" form, not a vector the vop supplies (finding 36).
+44. **On images the trained machine names shapes at sizes and places it never saw, where an
+    MLP cannot, but it does so with blurred pointers; with whole steps it mostly fails.**
+    [solid for the shapes table as trained: 3 seeds; the rest hints.
+    `scripts/image.sh`, docs/results-2026-11-27-images.md] The image device: 66 input
+    slots (the whole image shrunk to one slot, 16 coarse patches, 49 fine), six steps
+    (right, left, down, up, zoom in, zoom out), no encoder. A bank of 128.
+
+    | naming a circle, square or triangle (chance 0.33) | trained sizes and places | large shapes | centre in the right third |
+    |---|---|---|---|
+    | vvm as trained | 1.00 | 0.98 to 1.00 | 0.98 to 0.99 |
+    | MLP, same weights | 0.99 to 1.00 | 0.84 to 0.86 | 0.37 to 0.42 |
+    | vvm, whole steps | 0.40 to 0.59 | 0.40 to 0.58 | 0.40 to 0.58 |
+
+    Classifying is below the MLP and still climbing when the runs stop: MNIST 0.92 to 0.95
+    against 0.98, Kuzushiji 0.73 against 0.91, Fashion 0.78 against 0.85 (1,000 to 2,000
+    steps); with whole steps 0.3 to 0.5. As trained a pointer is a blend over about ten
+    slots, and the move by content is a soft match over every slot, which is attention by
+    content. It reaches the ink by seeking (61 to 67% of moves on shapes); zooming and grid
+    steps are 2 to 3%. So what scores here is closer to attention than to a pointer
+    walking. Pictures: docs/img/look-shapes-mix.png and the others beside it.
 
