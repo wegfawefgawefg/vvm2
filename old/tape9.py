@@ -1,6 +1,6 @@
 """Lists: copy and reverse, tested on longer lists than trained.
 
-    python -m vvm2.tape copy|reverse [STEPS] [vops=32 cores=4 seed=0 gru=1 mix=1]
+    python -m old.tape9 copy|reverse [STEPS] [vops=32 cores=4 seed=0 gru=1 mix=1]
 
 The world puts the list one item a slot in the input slots and reads the answer from as
 many output slots. An item is one of 8 symbols, each a fixed vector of 16 numbers (the
@@ -18,8 +18,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .common import params
-from .core import SLOT, Core
+from vvm2.common import params
+from .core9 import SLOT, Core
 
 SYMBOLS = 8
 

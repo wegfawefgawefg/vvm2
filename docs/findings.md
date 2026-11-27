@@ -430,4 +430,12 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
 
     Exact pointers in training: two clean successes and three outright failures across
     findings 46 and 49. Not a method to lean on yet.
+50. **One memory with vops in it, a vop as a block of 16 slots, four cores, registers as
+    slots: copy is exact at 12 times the trained length with 8,937 learned numbers.**
+    [hint: one seed, `python -m old.tape9 copy 3000 mix=0`] Trained with pointers that
+    could sit between slots and run with whole steps: every list right at lengths 8 to 96.
+    One core does it: its control slot says step both pointers by one every tick and its
+    pc never changes, so the loop is what happens when nothing writes its registers. The
+    other three cores idle. This form still had stepping pointers and blended reads, which
+    the owner did not want; it is in old/core9.py. The form after it has neither.
 
