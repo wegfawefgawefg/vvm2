@@ -11,12 +11,16 @@ The machine has a few pointers: R read pointers and one write pointer. A pointer
 in memory, exactly one slot. It is not an address vector and nothing is matched to find it.
 A vop moves a pointer by steps:
 
-    stay | next | previous | go to the first or the last slot of a region      by position
+    stay | one of the device's own steps | go to the first or the last slot of a region
+                                                                               by position
     seek: go to the slot whose contents best match a vector the vop supplies     by content
 
-"next" and "previous" mean the neighbouring slot of the same region and stop at its ends.
-(A device with another shape would say what its own steps are: for an image, up, down,
-left and right.) So a pointer is an integer and a step is adding one.
+The machine has a fixed number of step kinds (`moves`, 2 unless said) and does not know
+what they mean. The device says where each kind of step leads from each of its slots: on a
+line, step 0 is the next slot and step 1 the previous one, stopping at the ends; on a grid a
+device may make them right, left, down and up, and further ones zoom between a coarse and a
+fine copy of an image. Scratch and output are lines. So a pointer is an integer and a step
+is a table lookup.
 
 A vop is a key (16 numbers) and one matrix with a bias.
 
@@ -48,8 +52,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 SLOT = 16
-STEPS = 3 + 6 + 1   # stay, next, previous; the first and last slot of input, scratch and
-                    # output; seek (by content)
+ANCHORS = 6         # the first and last slot of input, scratch and output
 
 
 def move(slot, c, share=None):
@@ -62,12 +65,14 @@ def move(slot, c, share=None):
 
 
 class Core(nn.Module):
-    def __init__(self, scratch=32, ops=128, k=4, reads=2, seek_self=False):
+    def __init__(self, scratch=32, ops=128, k=4, reads=2, seek_self=False, moves=2):
         super().__init__()
         self.scratch, self.ops, self.k, self.reads = scratch, ops, k, reads
-        # seek_self: one more step, "go to another slot like the one I am on", with nothing
-        # for the vop to supply
-        self.steps = STEPS + int(seek_self)
+        self.moves = moves
+        # a pointer's choices, in this order: stay; the device's `moves` steps; the six
+        # region ends; seek; and with seek_self one more, "go to another slot like the one I
+        # am on", with nothing for the vop to supply
+        self.steps = 1 + moves + ANCHORS + 1 + int(seek_self)
         ptrs = reads + 1
         self.boot_pc = nn.Parameter(F.normalize(torch.randn(SLOT), dim=0) * 0.5)
         self.boot_at = nn.Parameter(torch.zeros(ptrs, 6))   # where each pointer starts
@@ -82,11 +87,13 @@ class Core(nn.Module):
         self.hard = False   # running, not training: every pointer takes its likeliest step
                             # whole, so pointers are single slots and stay so at any length
 
-    def forward(self, world, ticks, n_out, trace=False):
+    def forward(self, world, ticks, n_out, trace=False, go=None):
         """Run for `ticks` ticks.
         world     [B, n_in, 16], the input slots for the whole run; or a function of the
                   tick number that returns them, for input that changes while it runs
         n_out     how many output slots the world wants
+        go        the device's steps: a whole-number table [moves, n_in]; go[m, i] is the
+                  input slot that step m leads to from input slot i. Left out: a line.
         Returns the output region after every tick: [ticks, B, n_out, 16]."""
         first = world(0) if callable(world) else world
         n, n_in = len(first), first.shape[1]
@@ -99,6 +106,12 @@ class Core(nn.Module):
         head[[0, ends[0], ends[2], ends[4]]] = True
         nxt = torch.where(last, place, place + 1)           # a step stops at a region's end
         prv = torch.where(head, place, place - 1)
+        to = place.repeat(self.moves, 1)                    # [moves, slots]: where each leads
+        to[0] = nxt
+        if self.moves > 1:
+            to[1] = prv
+        if go is not None:                                  # the input device's own steps
+            to[:, 1:1 + n_in] = 1 + go
         anchors = F.one_hot(torch.tensor(ends), slots).float()          # [6, slots]
         can_write = torch.ones(slots)
         can_write[1:1 + n_in] = 0
@@ -130,7 +143,7 @@ class Core(nn.Module):
             mine = F.normalize(torch.einsum("bps,bsd->bpd", at, mem), dim=-1)
             twin = self.seek_sharp * (mine @ F.normalize(mem, dim=-1).transpose(1, 2)) - 30.0 * at
             twin = torch.softmax(twin.masked_fill(place == 0, float("-inf")), dim=-1)
-            step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, STEPS]
+            step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, steps]
             if self.hard and not self.training:
                 step = F.one_hot(step.argmax(dim=-1), self.steps).float()
                 found = F.one_hot(found.argmax(dim=-1), slots).float()
@@ -138,12 +151,15 @@ class Core(nn.Module):
             write = at[:, -1]
             mem = move(mem, vec[:, None, :SLOT], (write * can_write).unsqueeze(-1))   # store
             mem = torch.cat([move(mem[:, :1], vec[:, None, SLOT:]), mem[:, 1:]], dim=1)
-            fwd = torch.zeros_like(at).index_add(2, nxt, at)
-            back = torch.zeros_like(at).index_add(2, prv, at)
-            at = (step[..., 0:1] * at + step[..., 1:2] * fwd + step[..., 2:3] * back
-                  + step[..., 3:9] @ anchors + step[..., 9:10] * found)
-            if self.steps > STEPS:
-                at = at + step[..., 10:11] * twin
+            m = self.moves
+            new = step[..., 0:1] * at
+            for j in range(m):
+                new = new + step[..., 1 + j:2 + j] * torch.zeros_like(at).index_add(2, to[j], at)
+            new = new + step[..., 1 + m:1 + m + ANCHORS] @ anchors
+            new = new + step[..., 1 + m + ANCHORS:2 + m + ANCHORS] * found
+            if self.steps > 2 + m + ANCHORS:
+                new = new + step[..., 2 + m + ANCHORS:] * twin
+            at = new
             outs.append(mem[:, slots - n_out:])
             exact.append(at.max(dim=-1).values.mean().detach())
             if not self.training:

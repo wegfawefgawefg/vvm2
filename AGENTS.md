@@ -22,6 +22,15 @@ no private paths, names, hostnames or keys in anything tracked.
 - Look inside a win before calling it one: what does the vvm do tick by tick.
 - A null stated cleanly is a good result. Say what you did not do.
 
+## The core is frozen while tasks are tried
+
+`vvm2/core.py` is the machine, and `docs/design.md` says what it is and why. A task does not
+change it. A task is a world around the core: it supplies the input slots, the device's
+steps (`go`), the number of output slots and the ticks, and reads the output slots
+(`vvm2/tape.py` is the pattern). If a task cannot be done without changing the machine, do
+not change it: write down what is missing and why, as a finding. Always report the machine
+"run with whole steps" (`core.hard = True`) beside the trained run, and show a trace.
+
 ## Layout and style
 
 - `vvm2/`: the Python package (model, baselines, tasks, harness). `scripts/`: one shell
@@ -30,11 +39,12 @@ no private paths, names, hostnames or keys in anything tracked.
   `data/` are not tracked; scripts fetch data and remake outputs.
 - Files under 500 lines. Plain words, no emoji, no time estimates. Small functions, no
   framework beyond torch and numpy unless there is a reason written down.
-- `scripts/smoke.sh` must run end to end before any hand-back.
+- Your own script must run end to end with a `--quick` setting before any hand-back.
 
 ## Machine manners
 
-- At most 3 jobs at once on this PC, each limited to a few threads, always `nice -n 19`.
+- At most 2 jobs at once on this PC, each with 4 threads (`torch.set_num_threads(4)`), always
+  `nice -n 19`. Four agents share the CPU.
 - Never open a window. Never kill by pattern; exact pids of processes you started only.
 - No `rm` on variable globs. If disk is low, report; do not delete to make room.
 - Commit in your own worktree; do not push. Do not leave anything running, and do not end

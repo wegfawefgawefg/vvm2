@@ -7,14 +7,25 @@ finding so far is one seed; a claim is not earned until it holds on several.
 
 It learns routines that carry beyond what it was trained on.
 
-- *(running)* Lists on a line of memory: copy, reverse. Trained on lengths 2 to 8, tested
-  on 8 to 24. `scripts/tape.sh copy`.
-- *(running)* The lights game (Simon): the sequence arrives one light at a time and has to
-  be stored and played back. `scripts/tape.sh simon`.
-- Adding two numbers digit by digit with the carry.
-- Moved digits, where a first sign of a shared routine was seen (finding 28): the same
-  test on the new core, then shrunk, enlarged and turned digits.
-- An image seen through a small window the machine moves and zooms.
+- *(done, 3 seeds)* Copy and reverse: trained on lengths 2 to 8, exact at 96 (findings 33, 37).
+- *(done, 1 seed)* Lookup by key: trained on 2 to 6 pairs, right at 24 (finding 36).
+- *(open)* The lights game: learned at trained lengths only, not as a routine (finding 34).
+
+**The battery: find where the limits are.** Each is its own task file on the one core, with
+a plain net beside it, tested beyond what it trained on, run with whole steps, with a trace.
+
+- *(running)* Images through pointers that move on a grid and zoom between a coarse and a
+  fine copy: MNIST, Kuzushiji, Fashion; circles, squares and triangles of any size and
+  place, named and then drawn; generating clothes and bags, later dogs (needs colour and
+  another data set).
+- *(running)* Cellular automata: one-line rules, then Conway's, learned on small boards and
+  run on larger ones.
+- *(running)* Algorithms and conditionals: adding with a carry, counting, parity, sorting,
+  matching brackets, keeping only some items; the lights game at long holds, with and
+  without a clock device.
+- *(running)* Ordinary curves and control: xor, a sine, spirals; balancing a pole, then
+  harder control, trained without labels.
+- Later: walking, picking things up; an image seen through a window it moves.
 
 ## 2. A big bank is cheap
 
