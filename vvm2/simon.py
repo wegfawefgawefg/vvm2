@@ -2,7 +2,7 @@
 
     python -m vvm2.simon [STEPS] [hold=1 lag=1 max=6 colours=4 scratch=64 ops=32 seed=0
                                   gru=1 threads=1 mix=0 loop=0
-                                  before=0 grow=0 draw=0 one=0]
+                                  before=0 grow=0 draw=0 one=0 seek=1]
 
 The world owns two input slots and reads one output slot:
 
@@ -26,6 +26,7 @@ by its shares, the gradient passing straight through (the switch `draw` in vvm2/
 draw=2 is the same with the likeliest move taken, nothing drawn.
 one=1 runs exactly one vop a tick, with no blend: drawn by nearness to the pc while
 learning, the nearest when running (the switch `one` in vvm2/core.py).
+seek=0 holds the move by content off, so pointers move by position only.
 grow=1 is a curriculum of data: games of 1 to 2 lights at first, the longest game growing
 to `max` by 60% of the way through training.
 mix=1 trains on two runs of every batch, one as usual and one with whole steps, and adds
@@ -42,7 +43,7 @@ import torch.nn.functional as F
 
 from .common import params
 from .core import SLOT, Core
-from .tape import codebook, sized
+from .tape import codebook, no_seek, sized
 
 MOVES = ["stay", "next", "prev", "in0", "inN", "sc0", "scN", "out0", "outN", "seek"]
 
@@ -157,11 +158,13 @@ def score(model, tests, g, colours):
 
 
 def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=32, seed=0, gru=True,
-        threads=1, mix=False, loop=False, before=0, grow=False, draw=False, one=False):
+        threads=1, mix=False, loop=False, before=0, grow=False, draw=False, one=False, seek=True):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
     vm = SimonVM(colours, hold, lag, scratch=scratch, ops=ops, k=min(4, ops))
     vm.core.draw, vm.core.one, vm.core.sample = bool(draw), one, draw != 2
+    if not seek:   # the move by content held off, from outside (see tape.no_seek)
+        no_seek(vm.core)
     if loop:   # every vop starts out leaving the pc alone, so the same vops come round
         with torch.no_grad():   # again until one learns to jump: a loop is the default
             vm.core.m[:, SLOT:2 * SLOT] = 0
@@ -178,7 +181,8 @@ def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=32, seed=0
               + (". The longest game grows from 2" if grow else "")
               + (". Pointers exact in training too, moves %s" % (
                   "drawn" if draw == 1 else "the likeliest") if draw else "")
-              + (". One vop a tick, no blend" if one else "")))
+              + (". One vop a tick, no blend" if one else "")
+              + ("" if seek else ". No move by content")))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     if before:   # the same machine learns to copy lists first (lengths 2 to 8)
@@ -246,4 +250,5 @@ if __name__ == "__main__":
         scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 32)), seed=int(a.get("seed", 0)),
         gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1",
         before=int(a.get("before", 0)), grow=a.get("grow", "0") == "1",
-        draw=int(a.get("draw", 0)), one=a.get("one", "0") == "1")
+        draw=int(a.get("draw", 0)), one=a.get("one", "0") == "1",
+        seek=a.get("seek", "1") == "1")
