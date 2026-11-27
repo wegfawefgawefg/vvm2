@@ -24,7 +24,7 @@ on much longer ones, to find where the machine stops.
 
   options:  ops=128   the size of the bank          k=4      vops fetched a tick
             seed=0                                  gru=0    skip the GRUs
-            threads=4                               twin=1   the seek-my-twin step
+            threads=1                               twin=1   the seek-my-twin step
             boot=1    start the read pointers on the first input slot and the write pointer
                       on the first output slot (only where they start; still learned)
             seek=0    hold the moves by content off (tape.no_seek)
@@ -335,7 +335,7 @@ def train(model, task, steps, lengths, seed):
     return g
 
 
-def run(name, steps, ops=128, k=4, seed=0, gru=True, threads=4, twin=False, boot=False,
+def run(name, steps, ops=128, k=4, seed=0, gru=True, threads=1, twin=False, boot=False,
         lo=2, hi=8, tests=(8, 16, 32, 64), seek=True):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     extra = dict(a.split("=") for a in sys.argv[3:])
     run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 3000,
         ops=int(extra.get("ops", 128)), k=int(extra.get("k", 4)), seed=int(extra.get("seed", 0)),
-        gru=extra.get("gru", "1") == "1", threads=int(extra.get("threads", 4)),
+        gru=extra.get("gru", "1") == "1", threads=int(extra.get("threads", 1)),
         twin=extra.get("twin", "0") == "1", boot=extra.get("boot", "0") == "1",
         lo=int(extra.get("lo", 2)), hi=int(extra.get("hi", 8)), seek=extra.get("seek", "1") == "1",
         tests=tuple(int(t) for t in extra.get("tests", "8,16,32,64").split(",")))

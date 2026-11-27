@@ -12,7 +12,7 @@ mkdir -p out/algos
 if [ "${1:-}" = "--quick" ]; then
     for task in shift double twice keep count parity compare addbin adddec brackets sort \
                 cond condflash; do
-        nice -n 19 .venv/bin/python -m vvm2.algos "$task" 30 tests=8,16 threads=4
+        nice -n 19 .venv/bin/python -m vvm2.algos "$task" 30 tests=8,16
     done
     exit
 fi
