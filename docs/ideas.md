@@ -194,4 +194,13 @@ Nothing below has been shown beyond that.
 60. **Guard against sprawl:** every new idea must be a switch on the one core, a device
     outside the machine, or a training signal. Nothing new goes inside the tick unless it
     replaces something there.
+61. **Rules that reshape the bank while it trains** (owner: "like NEAT in the ol bank"):
+    split a vop that is fetched for too many different jobs; duplicate one and vary the
+    copy; remove ones never fetched; add one where nothing matches. Selection as well as
+    gradient: keep the variants that get used.
+62. **Odd ideas from thonksheet worth trying here** (owner): a count that steps on every
+    use, kept with each vop, as its record of how much it has been trusted; winners
+    holding back the others so every vop gets a share; an error sent one hop back when no
+    gradient is to hand, for learning while running; a fresh reader of the frozen machine
+    as the test of whether its inside learned anything.
 

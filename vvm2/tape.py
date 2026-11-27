@@ -4,6 +4,10 @@
   python -m vvm2.tape reverse [STEPS]     the same, back to front
   python -m vvm2.tape simon   [STEPS]     the lights game: watch a sequence of four colours,
                                           one light at a time, then play it back
+  options after STEPS:  ops=8     the size of the bank (a small one cannot hold a program
+                                  written out step by step, so it has to loop)
+                        shift=16  lists begin anywhere in the first 16 places of the line
+                        gru=0     skip the GRU
 
 Lists: the world lays the list out one item a slot along a line, and reads the answer from
 output slots along a line of the same length. An item is one of 8 symbols, each a fixed
@@ -49,10 +53,12 @@ class TapeVM(nn.Module):
         self.register_buffer("book", codebook(SYMBOLS + 2))   # 8 symbols, then watch, play
         self.temp = nn.Parameter(torch.tensor(10.0))
 
-    def lists(self, tokens):
-        """tokens [B, L] -> logits [B, L, SYMBOLS] read from the output slots at the end."""
+    def lists(self, tokens, start=0, trace=False):
+        """tokens [B, L] -> logits [B, L, SYMBOLS] read from the output slots at the end.
+        start: where along the line the list (and its answer) begins."""
         length = tokens.shape[1]
-        outs = self.core(self.book[tokens], 2 * length + 4, line_pos(length), line_pos(length))
+        outs = self.core(self.book[tokens], 2 * length + 4, line_pos(length, start),
+                         line_pos(length, start), trace=trace)
         return outs[-1] @ self.book[:SYMBOLS].T * self.temp
 
     def simon(self, colours):
@@ -111,25 +117,54 @@ def sized(make, target):
     return min(range(8, 600, 4), key=lambda w: abs(params(make(w)) - target))
 
 
-def run(task, steps):
+def show_trace(vm, task, length, g):
+    """One list, tick by tick: which vop ran (the best match), which input slot the first
+    read pointed at most, which output slot the write pointed at most. A loop shows as the
+    same few vops coming round again while both pointers step along."""
+    x = torch.randint(SYMBOLS, (200, length), generator=g)
+    with torch.no_grad():
+        vm.lists(x, trace=True)
+    core, log = vm.core, vm.core.trace
+    first_in, first_out = core.head, core.head + length + core.scratch
+    vops = [int(t[0][0]) for t in log]
+    reads = [int(t[1][0, 0, first_in:first_in + length].argmax()) for t in log]
+    on_in = [float(t[1][0, 0, first_in:first_in + length].sum()) for t in log]
+    writes = [int(t[2][0, first_out:first_out + length].argmax()) for t in log]
+    on_out = [float(t[2][0, first_out:first_out + length].sum()) for t in log]
+    distinct = torch.stack([t[0] for t in log], dim=1)
+    kinds = torch.tensor([len(set(r.tolist())) for r in distinct]).float().mean()
+    print("  trace, %s of length %d, %d ticks: %.1f different vops a run" % (
+        task, length, len(log), kinds))
+    print("    vop run:        " + " ".join("%3d" % v for v in vops))
+    print("    read points at: " + " ".join("%3s" % (r if m > 0.5 else ".") for r, m in zip(reads, on_in)))
+    print("    write points at:" + " ".join("%3s" % (w if m > 0.5 else ".") for w, m in zip(writes, on_out)),
+          flush=True)
+
+
+def run(task, steps, ops=128, shift=0, only_vvm=False):
     torch.set_num_threads(8)
     simon = task == "simon"
     kinds = COLOURS if simon else SYMBOLS
     short, tests = ((1, 6), (4, 6, 8, 10, 12)) if simon else ((2, 8), (8, 12, 16, 24))
 
-    def answer(model, x):
-        logits = model.simon(x) if simon else model.lists(x)
+    def answer(model, x, start=0):
+        if simon:
+            logits = model.simon(x)
+        else:
+            logits = model.lists(x, start) if isinstance(model, TapeVM) else model.lists(x)
         return logits, (x.flip(1) if task == "reverse" else x)
 
     torch.manual_seed(0)
-    vm = TapeVM()
+    vm = TapeVM(ops=ops, k=min(4, ops))
     make = (lambda w: SimonGRU(w)) if simon else (lambda w: ListGRU(w))
     gru = make(sized(make, params(vm)))
-    print("%s: trained on lengths %d to %d, %d steps. In each cell: share of items right / "
-          "share of whole sequences right" % (task, short[0], short[1], steps))
+    print("%s: trained on lengths %d to %d, %d steps, a bank of %d vops%s. In each cell: "
+          "share of items right / share of whole sequences right" % (
+              task, short[0], short[1], steps, ops,
+              ", lists starting anywhere in the first %d places" % shift if shift else ""))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
-    for name, model in (("vvm", vm), ("gru", gru)):
+    for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
         sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
         g = torch.Generator().manual_seed(0)
@@ -137,7 +172,8 @@ def run(task, steps):
             model.train()
             length = int(torch.randint(short[0], short[1] + 1, (1,), generator=g))
             x = torch.randint(kinds, (64, length), generator=g)
-            logits, want = answer(model, x)
+            start = int(torch.randint(shift + 1, (1,), generator=g)) if shift else 0
+            logits, want = answer(model, x, start)
             loss = F.cross_entropy(logits.reshape(-1, kinds), want.reshape(-1))
             opt.zero_grad()
             loss.backward()
@@ -153,8 +189,14 @@ def run(task, steps):
                 hit = logits.argmax(dim=-1) == want
                 cells.append("%.2f / %.2f" % (hit.float().mean(), hit.all(dim=1).float().mean()))
         print("| %s | %d | %s |" % (name, params(model), " | ".join(cells)), flush=True)
+        if name == "vvm" and not simon:
+            for length in (8, 12):
+                show_trace(vm, task, length, g)
 
 
 if __name__ == "__main__":
+    extra = dict(a.split("=") for a in sys.argv[3:])
     run(sys.argv[1] if len(sys.argv) > 1 else "copy",
-        int(sys.argv[2]) if len(sys.argv) > 2 else 4000)
+        int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
+        ops=int(extra.get("ops", 128)), shift=int(extra.get("shift", 0)),
+        only_vvm=extra.get("gru", "1") == "0")
