@@ -25,6 +25,11 @@ a plain net beside it, tested beyond what it trained on, run with whole steps, w
   without a clock device.
 - *(running)* Ordinary curves and control: xor, a sine, spirals; balancing a pole, then
   harder control, trained without labels.
+- *(next, after the image device is in)* Cats against dogs, then all ten classes of a
+  small colour data set (CIFAR-10): a colour patch a slot, coarse and fine levels. Then look
+  inside: for each vop, what is under the pointer when it runs, and where it sends the
+  pointer next. The owner's question: is there a vop for fur, one for an ear, one that means
+  "look to the left of the right eye".
 - Later: walking, picking things up; an image seen through a window it moves.
 
 ## 2. A big bank is cheap
