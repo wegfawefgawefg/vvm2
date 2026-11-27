@@ -119,23 +119,29 @@ class LookupGRU(nn.Module):
         return self.out(y[:, -1])
 
 
-def run_lookup(steps, ops=128, only_vvm=False):
+def run_lookup(steps, ops=128, only_vvm=False, grow=False, seek_self=False):
+    """grow: a curriculum of data: one pair at first, more as training goes on, up to six
+    by 60% of the way. seek_self: the machine has the extra step "go to another slot like
+    the one I am on"."""
     torch.set_num_threads(8)
     torch.manual_seed(0)
-    vm = LookupVM(ops=ops, k=min(4, ops))
+    vm = LookupVM(ops=ops, k=min(4, ops), seek_self=seek_self)
     gru = LookupGRU(sized(lambda w: LookupGRU(w), params(vm)))
     tests = (6, 12, 24)
-    print("lookup: find a value by its key. Trained on 2 to 6 pairs, %d steps. Share of "
-          "answers right (chance 0.125)" % steps)
+    print("lookup: find a value by its key. Trained on %s pairs, %d steps%s. Share of "
+          "answers right (chance 0.125)" % ("1 growing to 6" if grow else "2 to 6", steps,
+                                            ", with the seek-my-twin step" if seek_self else ""))
     print("| model | weights | " + " | ".join("%d pairs" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
         sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
         g = torch.Generator().manual_seed(0)
-        for _ in range(steps):
+        for step in range(steps):
             model.train()
-            x, want = lookup_batch(64, int(torch.randint(2, 7, (1,), generator=g)), g)
+            most = 1 + int(5 * min(1.0, step / (0.6 * steps))) if grow else 6
+            least = 1 if grow else 2
+            x, want = lookup_batch(64, int(torch.randint(least, most + 1, (1,), generator=g)), g)
             loss = F.cross_entropy(model(x), want)
             opt.zero_grad()
             loss.backward()
@@ -162,10 +168,12 @@ def run_lookup(steps, ops=128, only_vvm=False):
             vm.core.hard = False
             log = vm.core.trace
             asked = int(x[0, 0])
-            where = 1 + 2 * int((x[0, 1::2] == asked).nonzero()[0])
-            print("  trace, 6 pairs, run with whole steps (the asked-for key is in input slot "
-                  "0; its match is in slot %d, its value in slot %d)" % (where, where + 1))
-            moves = ["stay", "next", "prev", "in0", "inN", "sc0", "scN", "out0", "outN", "seek"]
+            where = 2 + 2 * int((x[0, 1::2] == asked).nonzero()[0])   # slot 0 is the pc
+            print("  trace, 6 pairs, run with whole steps (the asked-for key is in slot 1; its "
+                  "match is in slot %d, its value in slot %d; the answer goes in slot %d)" % (
+                      where, where + 1, 1 + x.shape[1] + vm.core.scratch))
+            moves = ["stay", "next", "prev", "in0", "inN", "sc0", "scN", "out0", "outN", "seek",
+                     "twin"]
             print("    vop:    " + " ".join("%5d" % int(t[0][0]) for t in log))
             for p in range(vm.core.reads + 1):
                 label = "write:  " if p == vm.core.reads else "read %d: " % (p + 1)
@@ -304,7 +312,8 @@ if __name__ == "__main__":
     extra = dict(a.split("=") for a in sys.argv[3:])
     if len(sys.argv) > 1 and sys.argv[1] == "lookup":
         run_lookup(int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
-                   ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0")
+                   ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0",
+                   grow=extra.get("grow", "0") == "1", seek_self=extra.get("twin", "0") == "1")
         sys.exit()
     run(sys.argv[1] if len(sys.argv) > 1 else "copy",
         int(sys.argv[2]) if len(sys.argv) > 2 else 4000,

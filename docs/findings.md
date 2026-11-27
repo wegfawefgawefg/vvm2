@@ -247,4 +247,23 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     seeking on most ticks with no routine: it never finds "seek the key, step to the slot
     beside it, carry that to the output". Copy and reverse are unharmed by the extra move
     (run with whole steps: all items right at every length to 96; whole lists 0.95 to 1.00).
+36. **Lookup by key is learned, and carries to four times as many pairs; it had only been
+    undertrained.** [hint: one seed each, `scripts/tape.sh lookup 16000`, `... 8000 twin=1`]
+    Trained on 2 to 6 pairs; share of answers right at 6, 12 and 24 pairs (chance 0.125; a
+    GRU of the same size 1.00, 1.00, 0.82):
+
+    | training | as trained | run with whole steps |
+    |---|---|---|
+    | 4,000 steps | 0.38, 0.28, 0.21 | 0.15, 0.13, 0.12 |
+    | 16,000 steps | 1.00, 1.00, 1.00 | 0.78, 0.77, 0.75 |
+    | 8,000 steps, one pair first and growing to six | 0.39, 0.25, 0.21 | 0.14, 0.14, 0.12 |
+    | 8,000 steps, with a built-in step "go to another slot like the one I am on" | 1.00, 1.00, 1.00 | 0.98, 0.97, 0.98 |
+    | 8,000 steps, both of those | 1.00, 1.00, 1.00 | 0.65, 0.62, 0.68 |
+
+    With the built-in step the trace is the routine one would write by hand: on the first
+    tick the read pointer goes from the asked-for key to its twin, on the second it steps
+    to the slot beside it, and the value there is carried to the output. That is a move by
+    content followed by a move by position. Without the built-in step it gets every answer
+    right as trained but leans on blended pointers (0.77 with whole steps). The curriculum
+    of data, as tried here, did not help.
 

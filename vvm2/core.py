@@ -62,15 +62,18 @@ def move(slot, c, share=None):
 
 
 class Core(nn.Module):
-    def __init__(self, scratch=32, ops=128, k=4, reads=2):
+    def __init__(self, scratch=32, ops=128, k=4, reads=2, seek_self=False):
         super().__init__()
         self.scratch, self.ops, self.k, self.reads = scratch, ops, k, reads
+        # seek_self: one more step, "go to another slot like the one I am on", with nothing
+        # for the vop to supply
+        self.steps = STEPS + int(seek_self)
         ptrs = reads + 1
         self.boot_pc = nn.Parameter(F.normalize(torch.randn(SLOT), dim=0) * 0.5)
         self.boot_at = nn.Parameter(torch.zeros(ptrs, 6))   # where each pointer starts
         self.keys = nn.Parameter(torch.randn(ops, SLOT) / math.sqrt(SLOT))
         fan_in = (ptrs + 1) * SLOT
-        self.fan_out = 2 * SLOT + ptrs * STEPS + ptrs * SLOT   # the last part: what to seek
+        self.fan_out = 2 * SLOT + ptrs * self.steps + ptrs * SLOT   # the last part: what to seek
         self.seek_sharp = nn.Parameter(torch.tensor(12.0))
         self.m = nn.Parameter(torch.randn(ops, self.fan_out, fan_in) / math.sqrt(fan_in))
         self.bias = nn.Parameter(torch.randn(ops, self.fan_out) * 0.1)
@@ -116,18 +119,22 @@ class Core(nn.Module):
             out = torch.einsum("bkij,bj->bki", self.m[idx], got) + self.bias[idx]   # execute
             vec = torch.einsum("bk,bki->bi", mix, F.hardtanh(out[..., :2 * SLOT]))
             ptrs = self.reads + 1
-            moves = out[..., 2 * SLOT:2 * SLOT + ptrs * STEPS]
-            want = torch.softmax(moves.reshape(n, self.k, ptrs, STEPS), dim=-1)
-            look = torch.einsum("bk,bki->bi", mix, out[..., 2 * SLOT + ptrs * STEPS:])
+            moves = out[..., 2 * SLOT:2 * SLOT + ptrs * self.steps]
+            want = torch.softmax(moves.reshape(n, self.k, ptrs, self.steps), dim=-1)
+            look = torch.einsum("bk,bki->bi", mix, out[..., 2 * SLOT + ptrs * self.steps:])
             look = F.normalize(look.view(n, ptrs, SLOT), dim=-1)
             like = look @ F.normalize(mem, dim=-1).transpose(1, 2)            # [B, P, slots]
             like = self.seek_sharp * like - 30.0 * at                        # not where it is
             like = like.masked_fill(place == 0, float("-inf"))               # nor the pc slot
             found = torch.softmax(like, dim=-1)
+            mine = F.normalize(torch.einsum("bps,bsd->bpd", at, mem), dim=-1)
+            twin = self.seek_sharp * (mine @ F.normalize(mem, dim=-1).transpose(1, 2)) - 30.0 * at
+            twin = torch.softmax(twin.masked_fill(place == 0, float("-inf")), dim=-1)
             step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, STEPS]
             if self.hard and not self.training:
-                step = F.one_hot(step.argmax(dim=-1), STEPS).float()
+                step = F.one_hot(step.argmax(dim=-1), self.steps).float()
                 found = F.one_hot(found.argmax(dim=-1), slots).float()
+                twin = F.one_hot(twin.argmax(dim=-1), slots).float()
             write = at[:, -1]
             mem = move(mem, vec[:, None, :SLOT], (write * can_write).unsqueeze(-1))   # store
             mem = torch.cat([move(mem[:, :1], vec[:, None, SLOT:]), mem[:, 1:]], dim=1)
@@ -135,6 +142,8 @@ class Core(nn.Module):
             back = torch.zeros_like(at).index_add(2, prv, at)
             at = (step[..., 0:1] * at + step[..., 1:2] * fwd + step[..., 2:3] * back
                   + step[..., 3:9] @ anchors + step[..., 9:10] * found)
+            if self.steps > STEPS:
+                at = at + step[..., 10:11] * twin
             outs.append(mem[:, slots - n_out:])
             exact.append(at.max(dim=-1).values.mean().detach())
             if not self.training:
