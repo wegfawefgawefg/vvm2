@@ -15,11 +15,10 @@ One tick, every core at once:
     the load address lands on a slot that slot is loaded
     the op is matmulled into it      an 8 by 8 grid times an 8 by 8 grid, each number then
                                      held between -1 and 1
-    the store address lands on a slot  the result is written there
+    the store address lands on a slot  the result replaces what was there
 
-Every write uses one rule: a slot moves toward what is written by its loudness,
-    slot = (1 - |c|) slot + c        with |c| at most 1
-so a quiet result nudges, a loud one replaces, a silent one does nothing.
+A store is a store: the slot becomes the result. There is no loudness and no mixing with
+what was there before. Numbers stay between -1 and 1 because every result is held there.
 
 Nothing steps and nothing walks. An address changes only when an op's result is written to
 the slot that holds it. All cores read memory as it stood when the tick began; then their
@@ -44,14 +43,6 @@ def address_of(slot, n):
     return slot / (n - 1)
 
 
-def write(slot, c):
-    """The one write rule."""
-    loud = float(np.linalg.norm(c))
-    if loud > 1.0:
-        c, loud = c / loud, 1.0
-    return (1.0 - loud) * slot + c
-
-
 class Machine:
     def __init__(self, memory, cores, world=()):
         """memory  [n, 64], what memory holds when the run starts
@@ -70,5 +61,5 @@ class Machine:
             done.append((pc, load, store, result.ravel()))
         for pc, load, store, result in done:
             if store not in self.world:
-                mem[store] = write(mem[store], result)
+                mem[store] = result
         return done
