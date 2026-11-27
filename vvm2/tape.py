@@ -4,6 +4,8 @@
   python -m vvm2.tape reverse [STEPS]     the same, back to front
   python -m vvm2.tape simon   [STEPS]     the lights game: watch a sequence of four colours,
                                           one light at a time, then play it back
+  python -m vvm2.tape lookup  [STEPS]     find a value by its key among 2 to 6 pairs, tested on
+                                          up to 24: needs a move by content, then one by position
   options after STEPS:  ops=8   the size of the bank       gru=0   skip the GRU
 
 Lists: the world puts the list one item a slot in the input region and reads the answer
@@ -75,6 +77,101 @@ class TapeVM(nn.Module):
         outs = self.core(world, 2 * HOLD * length, 1, trace=trace)
         read = [HOLD * length + HOLD * (i + 1) - 1 for i in range(length)]
         return outs[read, :, 0].transpose(0, 1) @ self.book[:COLOURS].T * self.temp
+
+
+KEYS = 32
+
+
+def lookup_batch(n, pairs, g):
+    """A question and `pairs` key and value pairs with distinct keys. The input slots are
+    [the key asked for, key 1, value 1, key 2, value 2, ...]; the answer is the value that
+    sits beside the asked-for key. Keys are symbols 0..31, values symbols 32..39."""
+    keys = torch.rand(n, KEYS, generator=g).argsort(dim=1)[:, :pairs]
+    values = torch.randint(SYMBOLS, (n, pairs), generator=g)
+    which = torch.randint(pairs, (n, 1), generator=g)
+    body = torch.stack([keys, KEYS + values], dim=2).flatten(1)
+    return torch.cat([keys.gather(1, which), body], dim=1), values.gather(1, which).squeeze(1)
+
+
+class LookupVM(nn.Module):
+    """The machine on the lookup task: 8 ticks whatever the number of pairs, one output slot."""
+
+    def __init__(self, **core):
+        super().__init__()
+        self.core = Core(**core)
+        self.register_buffer("book", codebook(KEYS + SYMBOLS, seed=11))
+        self.temp = nn.Parameter(torch.tensor(10.0))
+
+    def forward(self, tokens, trace=False):
+        outs = self.core(self.book[tokens], 8, 1, trace=trace)
+        return outs[-1][:, 0] @ self.book[KEYS:].T * self.temp
+
+
+class LookupGRU(nn.Module):
+    def __init__(self, width):
+        super().__init__()
+        self.embed = nn.Embedding(KEYS + SYMBOLS, width)
+        self.gru = nn.GRU(width, width, batch_first=True)
+        self.out = nn.Linear(width, SYMBOLS)
+
+    def forward(self, tokens, trace=False):
+        y, _ = self.gru(self.embed(torch.cat([tokens, tokens[:, :1]], dim=1)))  # asked again last
+        return self.out(y[:, -1])
+
+
+def run_lookup(steps, ops=128, only_vvm=False):
+    torch.set_num_threads(8)
+    torch.manual_seed(0)
+    vm = LookupVM(ops=ops, k=min(4, ops))
+    gru = LookupGRU(sized(lambda w: LookupGRU(w), params(vm)))
+    tests = (6, 12, 24)
+    print("lookup: find a value by its key. Trained on 2 to 6 pairs, %d steps. Share of "
+          "answers right (chance 0.125)" % steps)
+    print("| model | weights | " + " | ".join("%d pairs" % t for t in tests) + " |")
+    print("|---|---|" + "---|" * len(tests), flush=True)
+    for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
+        opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
+        sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
+        g = torch.Generator().manual_seed(0)
+        for _ in range(steps):
+            model.train()
+            x, want = lookup_batch(64, int(torch.randint(2, 7, (1,), generator=g)), g)
+            loss = F.cross_entropy(model(x), want)
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+            sched.step()
+        model.eval()
+
+        def cells():
+            row = []
+            with torch.no_grad():
+                for pairs in tests:
+                    x, want = lookup_batch(500, pairs, g)
+                    row.append("%.2f" % (model(x).argmax(dim=1) == want).float().mean())
+            return " | ".join(row)
+
+        print("| %s | %d | %s |" % (name, params(model), cells()), flush=True)
+        if name == "vvm":
+            vm.core.hard = True
+            print("| vvm, run with whole steps | %d | %s |" % (params(model), cells()), flush=True)
+            x, want = lookup_batch(200, 6, g)
+            with torch.no_grad():
+                vm(x, trace=True)
+            vm.core.hard = False
+            log = vm.core.trace
+            asked = int(x[0, 0])
+            where = 1 + 2 * int((x[0, 1::2] == asked).nonzero()[0])
+            print("  trace, 6 pairs, run with whole steps (the asked-for key is in input slot "
+                  "0; its match is in slot %d, its value in slot %d)" % (where, where + 1))
+            moves = ["stay", "next", "prev", "in0", "inN", "sc0", "scN", "out0", "outN", "seek"]
+            print("    vop:    " + " ".join("%5d" % int(t[0][0]) for t in log))
+            for p in range(vm.core.reads + 1):
+                label = "write:  " if p == vm.core.reads else "read %d: " % (p + 1)
+                print("    " + label + " ".join("%5s" % ("slot%d" % int(t[1][0, p].argmax())) for t in log))
+                print("      did:  " + " ".join("%5s" % moves[int(t[2][0, p].argmax())] for t in log))
+            sys.stdout.flush()
 
 
 class ListGRU(nn.Module):
@@ -205,6 +302,10 @@ def run(task, steps, ops=128, only_vvm=False):
 
 if __name__ == "__main__":
     extra = dict(a.split("=") for a in sys.argv[3:])
+    if len(sys.argv) > 1 and sys.argv[1] == "lookup":
+        run_lookup(int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
+                   ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0")
+        sys.exit()
     run(sys.argv[1] if len(sys.argv) > 1 else "copy",
         int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
         ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0")

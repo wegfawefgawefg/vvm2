@@ -11,7 +11,8 @@ The machine has a few pointers: R read pointers and one write pointer. A pointer
 in memory, exactly one slot. It is not an address vector and nothing is matched to find it.
 A vop moves a pointer by steps:
 
-    stay | next | previous | go to the first or the last slot of a region
+    stay | next | previous | go to the first or the last slot of a region      by position
+    seek: go to the slot whose contents best match a vector the vop supplies     by content
 
 "next" and "previous" mean the neighbouring slot of the same region and stop at its ends.
 (A device with another shape would say what its own steps are: for an image, up, down,
@@ -47,7 +48,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 SLOT = 16
-STEPS = 3 + 6   # stay, next, previous; the first and last slot of input, scratch, output
+STEPS = 3 + 6 + 1   # stay, next, previous; the first and last slot of input, scratch and
+                    # output; seek (by content)
 
 
 def move(slot, c, share=None):
@@ -68,7 +70,8 @@ class Core(nn.Module):
         self.boot_at = nn.Parameter(torch.zeros(ptrs, 6))   # where each pointer starts
         self.keys = nn.Parameter(torch.randn(ops, SLOT) / math.sqrt(SLOT))
         fan_in = (ptrs + 1) * SLOT
-        self.fan_out = 2 * SLOT + ptrs * STEPS
+        self.fan_out = 2 * SLOT + ptrs * STEPS + ptrs * SLOT   # the last part: what to seek
+        self.seek_sharp = nn.Parameter(torch.tensor(12.0))
         self.m = nn.Parameter(torch.randn(ops, self.fan_out, fan_in) / math.sqrt(fan_in))
         self.bias = nn.Parameter(torch.randn(ops, self.fan_out) * 0.1)
         self.register_buffer("picks", torch.zeros(ops))
@@ -112,17 +115,26 @@ class Core(nn.Module):
             got = torch.cat([torch.einsum("bps,bsd->bpd", at, mem).flatten(1), mem[:, 0]], dim=1)
             out = torch.einsum("bkij,bj->bki", self.m[idx], got) + self.bias[idx]   # execute
             vec = torch.einsum("bk,bki->bi", mix, F.hardtanh(out[..., :2 * SLOT]))
-            want = torch.softmax(out[..., 2 * SLOT:].reshape(n, self.k, -1, STEPS), dim=-1)
+            ptrs = self.reads + 1
+            moves = out[..., 2 * SLOT:2 * SLOT + ptrs * STEPS]
+            want = torch.softmax(moves.reshape(n, self.k, ptrs, STEPS), dim=-1)
+            look = torch.einsum("bk,bki->bi", mix, out[..., 2 * SLOT + ptrs * STEPS:])
+            look = F.normalize(look.view(n, ptrs, SLOT), dim=-1)
+            like = look @ F.normalize(mem, dim=-1).transpose(1, 2)            # [B, P, slots]
+            like = self.seek_sharp * like - 30.0 * at                        # not where it is
+            like = like.masked_fill(place == 0, float("-inf"))               # nor the pc slot
+            found = torch.softmax(like, dim=-1)
             step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, STEPS]
             if self.hard and not self.training:
                 step = F.one_hot(step.argmax(dim=-1), STEPS).float()
+                found = F.one_hot(found.argmax(dim=-1), slots).float()
             write = at[:, -1]
             mem = move(mem, vec[:, None, :SLOT], (write * can_write).unsqueeze(-1))   # store
             mem = torch.cat([move(mem[:, :1], vec[:, None, SLOT:]), mem[:, 1:]], dim=1)
             fwd = torch.zeros_like(at).index_add(2, nxt, at)
             back = torch.zeros_like(at).index_add(2, prv, at)
             at = (step[..., 0:1] * at + step[..., 1:2] * fwd + step[..., 2:3] * back
-                  + step[..., 3:] @ anchors)
+                  + step[..., 3:9] @ anchors + step[..., 9:10] * found)
             outs.append(mem[:, slots - n_out:])
             exact.append(at.max(dim=-1).values.mean().detach())
             if not self.training:

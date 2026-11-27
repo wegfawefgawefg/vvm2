@@ -239,4 +239,12 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     1.00 / 1.00 at 6 lights, 0.80 / 0.07 at 8, 0.61 at 12; a GRU 0.79 / 0.12 and 0.61. Its
     pointers are about half exact, and run with whole steps it falls to 0.47: what it
     learned depends on the blur.
+35. **A move by content is built and does not yet learn a lookup.** [hint: one seed, 4,000
+    steps, `scripts/tape.sh lookup`] "Seek" was added to a pointer's steps: go to the slot
+    whose contents best match a vector the vop supplies. Find a value by its key among 2 to
+    6 pairs, tested on 6, 12 and 24: the machine 0.38, 0.28, 0.21 (chance 0.125) and 0.15
+    run with whole steps; a GRU of the same size 1.00, 1.00, 0.82. The trace shows pointers
+    seeking on most ticks with no routine: it never finds "seek the key, step to the slot
+    beside it, carry that to the output". Copy and reverse are unharmed by the extra move
+    (run with whole steps: all items right at every length to 96; whole lists 0.95 to 1.00).
 
