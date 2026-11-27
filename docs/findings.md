@@ -355,4 +355,46 @@ All MNIST, 8 ticks, 256 vops, 4 blended a tick, one seed, 6,000 steps unless sai
     content. It reaches the ink by seeking (61 to 67% of moves on shapes); zooming and grid
     steps are 2 to 3%. So what scores here is closer to attention than to a pointer
     walking. Pictures: docs/img/look-shapes-mix.png and the others beside it.
+45. **Training does not find the lights-game routine by any method tried, though it keeps
+    the routine when started near it.** [hint: one seed a row, `scripts/simon.sh`] One tick
+    a light, one tick of reaction time, trained on games of 1 to 6 lights unless said;
+    scored with whole steps; share of lights right / of whole games right (chance 0.25).
+
+    | training | 6 lights | 12 lights |
+    |---|---|---|
+    | as usual (soft pointers), bank of 128 | 0.43 / 0.01 | 0.31 / 0.00 |
+    | the whole-step run added to the loss | 0.81 / 0.48 | 0.34 / 0.00 |
+    | pointers exact in training, moves drawn at random | 0.97 / 0.85 | 0.42 / 0.00 |
+    | pointers exact in training, the likeliest move (bank of 32) | 0.49 / 0.02 | 0.34 / 0.00 |
+    | one vop a tick with no blend, and exact pointers | 0.44 / 0.00 | 0.28 / 0.00 |
+    | no move by content, the whole-step run added (bank of 32) | 1.00 / 1.00 | 0.45 / 0.00 |
+    | no move by content, exact pointers, the likeliest move (bank of 32) | 1.00 / 1.00 | 0.58 / 0.00 |
+    | no move by content, exact pointers, moves drawn (bank of 32) | 0.96 / 0.79 | 0.43 / 0.00 |
+    | evolution on the exact machine, bank of 4, 800 rounds | 0.24 / 0.00 | 0.25 / 0.00 |
+
+    Also tried, none extending past the trained length: games of up to 12 and 16 lights; a
+    curriculum of data from 2 lights up; banks of 2, 4 and 32; vops that start out leaving
+    the pc alone; learning copy first on the same machine (and copy was forgotten: from
+    exact to chance at every length). What it learns instead: a different vop each tick
+    that puts each light at a fixed region end, or every light squeezed into the button
+    slot and unpicked at playback. Both are exact for a few lights and cannot grow.
+
+    The routine itself is stable: the two hand-written vops (finding 40) in a bank of 128,
+    with noise 0.3 times a fresh machine's on every weight, score 0.71 before training and
+    are exact at 6, 12, 24 and 48 lights after 1,500 ordinary steps. With noise 1.0 it is
+    lost. So it is a search problem, not a missing part.
+46. **Pointers that are exact during training too can learn copy, if the likeliest move is
+    taken and nothing is drawn.** [hint: one seed, `scripts/simon.sh 200 before=2000
+    draw=2`] Each pointer takes one move outright and the gradient is passed straight
+    through. Copy after 2,000 steps, bank of 32: every list right at lengths 8, 24 and 48.
+    With the move drawn at random by its share: 0.50 at length 8, and no better after
+    6,000 steps. The lights game goes the other way with the move by content left in
+    (finding 45). The machine trained this way is the machine that runs: there is no soft
+    form to lean on.
+47. **Speed of the training code, not of the machine.** [solid: measured] One thread,
+    lights game, bank of 32: training runs about 13,000 machine ticks a second and the
+    forward pass alone about 46,000, against about 9,000,000 for the same tick in C++
+    (bench/tick.cpp). Four threads a job is four times slower than one (209 ms a step
+    against 817 with the CPU busy): the tensors are small. Applying each fetched vop once
+    to the whole batch halved a training step at batch 64 and does not help larger batches.
 
