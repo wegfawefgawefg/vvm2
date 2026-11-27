@@ -40,10 +40,18 @@ score at fixed compute on a task with many sub-skills; how much of the bank is u
 noise in each place (pc, addresses, stored values, vops) and what it does to that; fetch by
 a bar; growing a vop when nothing matches. Then the engine and the disk.
 
-## 3. It can change itself
+## 3. It can change itself, and it never stops
 
-Vops in the same memory, written while running; a stream of inputs with nothing wiped; a
-new device added to a trained machine; learning without end.
+- **A machine on its own clock, never reset** (owner): it ticks at a fixed rate whether or
+  not anything arrives. The world writes inputs and reads outputs when it likes, swaps
+  devices in and out, and changes the task, with nothing wiped. Then time itself is
+  something it can learn: how long ago, how long between. Trained on a stream in windows,
+  with memory, pointers and the pc carried from one window to the next; this is where
+  credit past the window matters (ideas 24).
+- **A new device on a running machine** (owner's bet): no special shake-up is needed; give
+  it tasks that can only be done through the new slots and it will learn that part of
+  memory. To compare with: a short burst of noise or curiosity aimed at the new slots.
+- Vops in the same memory, written while running.
 
 ## Alongside
 
