@@ -43,8 +43,9 @@ not change it: write down what is missing and why, as a finding. Always report t
 
 ## Machine manners
 
-- At most 2 jobs at once on this PC, each with 4 threads (`torch.set_num_threads(4)`), always
-  `nice -n 19`. Four agents share the CPU.
+- One thread a job (`torch.set_num_threads(1)`), always `nice -n 19`, at most 4 jobs at once
+  an agent. Measured on the lights game with the CPU busy: 209 ms a training step on 1
+  thread, 817 ms on 4. The tensors are small; more threads only fight each other.
 - Never open a window. Never kill by pattern; exact pids of processes you started only.
 - No `rm` on variable globs. If disk is low, report; do not delete to make room.
 - Commit in your own worktree; do not push. Do not leave anything running, and do not end
