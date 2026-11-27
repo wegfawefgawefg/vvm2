@@ -1,16 +1,16 @@
 """Lists: copy and reverse, tested on longer lists than trained.
 
-    python -m vvm2.tape copy|reverse [STEPS] [ops=32 seed=0 gru=1 draw=0]
+    python -m vvm2.tape copy|reverse [STEPS] [vops=32 cores=4 seed=0 gru=1 mix=1]
 
-The world puts the list one item a slot in the input region and reads the answer from as
+The world puts the list one item a slot in the input slots and reads the answer from as
 many output slots. An item is one of 8 symbols, each a fixed vector of 16 numbers (the
 world's code book; the machine never learns it). The answer in an output slot is whichever
 symbol's vector it is nearest. The machine gets 2 ticks an item plus 4. Trained on lengths 2
-to 8, tested on 8 to 96, as trained and run with whole steps (exact pointers). A GRU of the
-same weight count reads the list and is asked for the answers one by one.
+to 8, tested on 8 to 96, as trained and run with whole steps (exact pointers). A GRU of
+about the same weight count reads the list and is asked for the answers one by one.
 
-draw=1 keeps the pointers exact while training too (see vvm2/core.py).
-(Lookup by key and the other tasks of the form before this one are in old/tape7.py.)
+mix=1 (the default) trains on two runs of every batch, one as usual and one with whole
+steps, and adds the two losses.
 """
 import sys
 
@@ -22,7 +22,6 @@ from .common import params
 from .core import SLOT, Core
 
 SYMBOLS = 8
-MOVES = ["stay", "next", "prev"]
 
 
 def codebook(n, seed=7):
@@ -63,36 +62,27 @@ class ListGRU(nn.Module):
 
 def sized(make, target):
     """The width at which a model has about `target` weights."""
-    return min(range(8, 600, 4), key=lambda w: abs(params(make(w)) - target))
+    return min(range(4, 600, 2), key=lambda w: abs(params(make(w)) - target))
 
 
-def place(i, n_in, scratch):
-    """A slot number as a region letter and a number: pc, i3, s0, o2."""
-    if i == 0:
-        return "pc"
-    if i <= n_in:
-        return "i%d" % (i - 1)
-    if i <= n_in + scratch:
-        return "s%d" % (i - 1 - n_in)
-    return "o%d" % (i - 1 - n_in - scratch)
-
-
-def show_trace(vm, x):
-    """Run 0 with whole steps, tick by tick: the vop that ran (the best match), where each
-    pointer is after the tick and the move that took it there."""
+def show_trace(vm, x, n_out, ticks=None):
+    """Run 0 with whole steps, tick by tick, for every core: what its pc matched best, where
+    its read and write pointers are after the tick, and the steps its control slot gave."""
     core = vm.core
     core.hard = True
     with torch.no_grad():
         vm(x, trace=True)
     core.hard = False
-    log, n_in = core.trace, x.shape[1]
-    print("  trace, length %d, whole steps" % n_in)
-    print("    vop:     " + " ".join("%4d" % int(t[0][0]) for t in log))
-    for p in range(core.reads + 1):
-        label = "write:   " if p == core.reads else "read %d:  " % (p + 1)
-        print("    " + label + " ".join("%4s" % place(int(t[1][0, p].argmax()), n_in, core.scratch)
-                                       for t in log))
-        print("      did:   " + " ".join("%4s" % MOVES[int(t[2][0, p].argmax())] for t in log))
+    log = core.trace[:ticks]
+    n_in = core.layout(0, 0)[4]          # the size with no input or output...
+    n_in = int(log[0][1].shape[-1]) - n_in - n_out   # ...gives the number of input slots
+    name = lambda i: core.name(int(i), n_in, n_out)  # noqa: E731
+    print("  trace, whole steps, run 0 (a step: +1 next, -1 previous, 0 stay)")
+    for c in range(core.cores):
+        print("    core %d  runs:  " % c + " ".join("%5s" % name(t[0][0, c]) for t in log))
+        for p, label in ((0, "read: "), (1, "write:")):
+            print("            %s " % label + " ".join("%5s" % name(t[1][0, c, p].argmax()) for t in log))
+            print("              step: " + " ".join("%+5d" % int(t[2][0, c, p]) for t in log))
     sys.stdout.flush()
 
 
@@ -106,15 +96,14 @@ def score(model, tests, g, reverse):
     return " | ".join(cells)
 
 
-def run(task, steps=3000, ops=32, seed=0, gru=True, draw=False):
+def run(task, steps=3000, vops=32, cores=4, seed=0, gru=True, mix=True):
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     reverse, tests = task == "reverse", (8, 12, 16, 24, 48, 96)
-    vm = TapeVM(ops=ops, k=min(4, ops))
-    vm.core.draw = draw
-    print("%s: trained on lengths 2 to 8, %d steps, a bank of %d vops, seed %d%s. In each cell: "
+    vm = TapeVM(vops=vops, cores=cores)
+    print("%s: trained on lengths 2 to 8, %d steps, %d cores, %d vops, seed %d%s. In each cell: "
           "share of items right / share of whole lists right" % (
-              task, steps, ops, seed, ", pointers exact while training" if draw else ""))
+              task, steps, cores, vops, seed, ", the whole-step run in the loss too" if mix else ""))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     models = [("vvm", vm)] + ([("gru", ListGRU(sized(ListGRU, params(vm))))] if gru else [])
@@ -122,16 +111,24 @@ def run(task, steps=3000, ops=32, seed=0, gru=True, draw=False):
         opt = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=0.01)
         sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=steps)
         g = torch.Generator().manual_seed(seed)
-        for _ in range(steps):
+        for step in range(steps):
             model.train()
             x = torch.randint(SYMBOLS, (64, int(torch.randint(2, 9, (1,), generator=g))), generator=g)
             want = x.flip(1) if reverse else x
             loss = F.cross_entropy(model(x).reshape(-1, SYMBOLS), want.reshape(-1))
+            if mix and name == "vvm":
+                model.eval()
+                vm.core.hard = True
+                loss = loss + F.cross_entropy(model(x).reshape(-1, SYMBOLS), want.reshape(-1))
+                vm.core.hard = False
+                model.train()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             sched.step()
+            if name == "vvm" and step % max(1, steps // 6) == 0:
+                print("    step %d: loss %.3f" % (step, loss.item()), flush=True)
         model.eval()
         print("| %s | %d | %s |" % (name, params(model), score(model, tests, g, reverse)), flush=True)
         if name == "vvm":
@@ -139,11 +136,12 @@ def run(task, steps=3000, ops=32, seed=0, gru=True, draw=False):
             print("| vvm, run with whole steps | %d | %s |" % (
                 params(vm), score(vm, tests, g, reverse)), flush=True)
             vm.core.hard = False
-            show_trace(vm, torch.randint(SYMBOLS, (4, 8), generator=g))
+            show_trace(vm, torch.randint(SYMBOLS, (4, 6), generator=g), 6)
 
 
 if __name__ == "__main__":
     a = dict(s.split("=") for s in sys.argv[2:] if "=" in s)
     first = [s for s in sys.argv[2:] if "=" not in s]
-    run(sys.argv[1], steps=int(first[0]) if first else 3000, ops=int(a.get("ops", 32)),
-        seed=int(a.get("seed", 0)), gru=a.get("gru", "1") == "1", draw=a.get("draw", "0") == "1")
+    run(sys.argv[1], steps=int(first[0]) if first else 3000, vops=int(a.get("vops", 32)),
+        cores=int(a.get("cores", 4)), seed=int(a.get("seed", 0)), gru=a.get("gru", "1") == "1",
+        mix=a.get("mix", "1") == "1")

@@ -1,49 +1,46 @@
-"""The vector virtual machine.
+"""The vector virtual machine: one memory, small vops, several cores.
 
-Memory is one list of slots, 16 numbers each:
+Memory is one list of slots, 16 numbers each. Everything is in it:
 
-    slot 0    the pc. Ordinary memory.
-    input     written by the world, never by the program
-    scratch   starts empty
-    output    written by the program, read by the world
+    registers   two slots a core: its pc and its control slot
+    input       written by the world, never by the program
+    output      written by the program, read by the world
+    scratch     starts empty
+    vops        each a label slot followed by 16 slots, which are a 16 by 16 matrix
 
-The machine has a few pointers: R read pointers and one write pointer. A pointer is a place
-in memory, exactly one slot. A vop moves a pointer in one way only, by position:
+A core is a pc (a slot), a read pointer and a write pointer (places: one slot each).
+Every tick, every core, all at once:
 
-    stay | one of the device's own steps
-
-The machine has a fixed number of step kinds (`moves`, 2 unless said) and does not know what
-they mean. The device says where each kind of step leads from each of its slots: on a line,
-step 0 is the next slot and step 1 the previous one, stopping at the ends; a device may make
-them a ring, or right, left, down and up on a grid. Scratch and output are lines.
-
-There is no move by content and no jump to a region's end (both were in the form before
-this one, old/core7.py; findings 43 and 45 are why they went). The only thing found by
-content is the vop: the fetch.
-
-A vop is a key (16 numbers) and one matrix with a bias.
-
-One tick, the same for every task:
-    fetch     the few vops whose keys are nearest the pc slot, blended by how near
-    load      the slots the read pointers are on, and the slot the write pointer is on
-    execute   one matmul: in, what was loaded and the pc slot; out, a value to store, the
-              next pc, and for every pointer how much it wants each move
-    store     the value goes to the slot under the write pointer; the pc slot takes its next
-              value; the pointers move
+    fetch     find the slots in memory most like its pc (any slot but a register can
+              match); the 16 slots after a match are a matrix. The few best are blended.
+    load      the slot under its read pointer
+    execute   one matmul, 16 by 16: a slot in, a slot out, clamped
+    store     the result goes to the slot under its write pointer
 
 Every store uses one rule: a slot moves toward what is written by its loudness,
     slot = (1 - |c|) slot + c        with |c| at most 1
-so a quiet vop nudges, a loud one replaces, a silent one does nothing.
+so a quiet result nudges, a loud one replaces, a silent one does nothing.
 
-Where a pointer starts is learned: one of the six region ends (the first or last slot of
-input, scratch or output), the same for every run. That and "the program cannot write the
-input" are all the machine knows about regions.
+A vop makes one slot and nothing else. It does not say where the pointers go or what runs
+next. Those are memory too: a core's pc is a slot, and its control slot holds two numbers,
+how far to step the read pointer and how far the write pointer this tick (+1 the next
+slot, -1 the previous one, 0 stay; between, part of the way). Any core can store into any
+register, its own or another's, exactly as into any other slot. A register keeps its value
+until something writes it, so a core left alone runs the same vop again with its pointers
+stepping the same way: a loop is the default.
 
-Pointers while learning. As first built, a pointer's move is a blend of moves while the
-machine learns (because the few fetched vops are blended), so the pointer is spread over
-several slots, and it is made exact only when running (`hard = True`). With `draw = True`
-the pointer is exact while learning too: it takes its likeliest move outright and the
-gradient is passed straight through, so the machine trained is the machine run (finding 46).
+Vops are memory, so a core can write one, and a pc can land on something written a moment
+ago. What is learned is what memory holds when a run starts: the vops, each core's pc and
+control slot, and where each pointer starts (one of a few named slots).
+
+Memory is one line: a step goes to the neighbouring slot, whatever is there, and stops only
+at the two ends of memory. A device may give its own steps for the input slots (`go`).
+
+While learning, a pointer may be part-way between slots and the fetch is a blend. When
+running (`hard = True`) every pointer step is a whole one, so a pointer is one slot.
+
+The forms before this one are in old/ (core8: one vop doing everything, a bank apart from
+memory).
 """
 import inspect
 import math
@@ -53,6 +50,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 SLOT = 16
+ROWS = 16     # a vop: one label slot, then this many slots, the rows of its matrix
 
 
 def move(slot, c, share=None):
@@ -64,106 +62,103 @@ def move(slot, c, share=None):
     return (1 - c.norm(dim=-1, keepdim=True)) * slot + c
 
 
-def choose(p, through):
-    """p [..., n], shares that sum to 1 -> the largest one outright. through: the gradient
-    passes as if the shares themselves had been used (straight through)."""
-    hot = F.one_hot(p.argmax(dim=-1), p.shape[-1]).float()
-    return hot + p - p.detach() if through else hot
-
-
 class Core(nn.Module):
-    def __init__(self, scratch=32, ops=32, k=4, reads=2, moves=2):
+    def __init__(self, cores=4, vops=32, scratch=32, k=4):
         super().__init__()
-        self.scratch, self.ops, self.k, self.reads, self.moves = scratch, ops, k, reads, moves
-        self.steps = 1 + moves          # a pointer's choices: stay, then the device's steps
-        ptrs = reads + 1
-        self.boot_pc = nn.Parameter(F.normalize(torch.randn(SLOT), dim=0) * 0.5)
-        self.boot_at = nn.Parameter(torch.zeros(ptrs, 6))   # where each pointer starts
-        self.keys = nn.Parameter(torch.randn(ops, SLOT) / math.sqrt(SLOT))
-        fan_in = (ptrs + 1) * SLOT
-        self.fan_out = 2 * SLOT + ptrs * self.steps
-        self.m = nn.Parameter(torch.randn(ops, self.fan_out, fan_in) / math.sqrt(fan_in))
-        self.bias = nn.Parameter(torch.randn(ops, self.fan_out) * 0.1)
-        self.register_buffer("picks", torch.zeros(ops))
+        self.cores, self.vops, self.scratch, self.k = cores, vops, scratch, k
+        self.boot_pc = nn.Parameter(torch.randn(cores, SLOT) / math.sqrt(SLOT))
+        self.boot_ctl = nn.Parameter(torch.zeros(cores, SLOT))
+        self.bank = nn.Parameter(torch.randn(vops, 1 + ROWS, SLOT) / math.sqrt(SLOT))
+        self.homes = 5 + 2 * cores     # the named slots a pointer can start on
+        self.boot_at = nn.Parameter(torch.zeros(cores, 2, self.homes))
         self.trace, self.exact = None, None
-        self.hard = False   # running, not training: every pointer takes its likeliest move
-        self.draw = False   # pointers exact while learning too (see the top of the file)
+        self.hard = False              # running, not learning: whole steps only
+
+    def layout(self, n_in, n_out):
+        """Where things are: the first slot of input, output, scratch, vops, and the size."""
+        reg = 2 * self.cores
+        inp, out = reg, reg + n_in
+        scr = out + n_out
+        vop = scr + self.scratch
+        return inp, out, scr, vop, vop + self.vops * (1 + ROWS)
 
     def forward(self, world, ticks, n_out, trace=False, go=None):
         """Run for `ticks` ticks.
         world     [B, n_in, 16], the input slots for the whole run; or a function that
-                  returns them tick by tick, for input that changes while it runs:
-                  world(t), or world(t, out) to be handed the output slots as they stand
-                  (None before the first tick), so the world can answer what the machine
-                  does. If it returns None the run ends there.
+                  returns them tick by tick: world(t), or world(t, out) to be handed the
+                  output slots as they stand (None before the first tick). If it returns
+                  None the run ends there.
         n_out     how many output slots the world wants
-        go        the device's steps: a whole-number table [moves, n_in]; go[m, i] is the
-                  input slot that step m leads to from input slot i. Left out: a line.
-        Returns the output region after every tick: [ticks, B, n_out, 16]."""
+        go        the input device's own steps: [2, n_in] whole numbers; go[0, i] is the
+                  input slot "+1" leads to from input slot i, go[1, i] the one "-1" leads to
+        Returns the output slots after every tick: [ticks, B, n_out, 16]."""
         hands = callable(world) and len(inspect.signature(world).parameters) > 1
         first = (world(0, None) if hands else world(0)) if callable(world) else world
-        n, n_in = len(first), first.shape[1]
-        slots = 1 + n_in + self.scratch + n_out
-        ends = [1, n_in, 1 + n_in, n_in + self.scratch, 1 + n_in + self.scratch, slots - 1]
-        place = torch.arange(slots)
-        last = torch.zeros(slots, dtype=torch.bool)
-        last[[0, ends[1], ends[3], ends[5]]] = True
-        head = torch.zeros(slots, dtype=torch.bool)
-        head[[0, ends[0], ends[2], ends[4]]] = True
-        to = place.repeat(self.moves, 1)                    # [moves, slots]: where each leads
-        to[0] = torch.where(last, place, place + 1)         # a step stops at a region's end
-        if self.moves > 1:
-            to[1] = torch.where(head, place, place - 1)
-        if go is not None:                                  # the input device's own steps
-            to[:, 1:1 + n_in] = 1 + go
-        can_write = torch.ones(slots)
-        can_write[1:1 + n_in] = 0
-        mem = torch.cat([self.boot_pc.expand(n, 1, -1), first,
-                         first.new_zeros(n, self.scratch + n_out, SLOT)], dim=1)
-        learn = self.draw and self.training
-        whole = self.draw or (self.hard and not self.training)
-        start = torch.softmax(self.boot_at, dim=-1).expand(n, -1, -1)
-        if whole:
-            start = choose(start, learn)
-        at = start @ F.one_hot(torch.tensor(ends), slots).float()            # [B, P, slots]
-        ptrs, fan_in = self.reads + 1, (self.reads + 2) * SLOT
+        n, n_in, C = len(first), first.shape[1], self.cores
+        inp, out, scr, vop, N = self.layout(n_in, n_out)
+        place = torch.arange(N)
+        fwd, back = (place + 1).clamp(max=N - 1), (place - 1).clamp(min=0)
+        if go is not None:
+            fwd[inp:out], back[inp:out] = inp + go[0], inp + go[1]
+        can_write = torch.ones(N)
+        can_write[inp:out] = 0
+        no_fetch = torch.zeros(N, dtype=torch.bool)       # a register is not a vop, and the
+        no_fetch[:2 * C] = True                           # last slots have no 16 after them
+        no_fetch[N - ROWS:] = True
+        regs = torch.stack([self.boot_pc, self.boot_ctl], dim=1).reshape(2 * C, SLOT)
+        mem = torch.cat([regs.expand(n, -1, -1), first, first.new_zeros(n, n_out + self.scratch, SLOT),
+                         self.bank.reshape(-1, SLOT).expand(n, -1, -1)], dim=1)
+        homes = torch.tensor([inp, out - 1, out, scr - 1, scr] + list(range(2 * C)))
+        start = torch.softmax(self.boot_at, dim=-1)                          # [C, 2, homes]
+        if self.hard and not self.training:
+            start = F.one_hot(start.argmax(dim=-1), self.homes).float()
+        at = (start @ F.one_hot(homes, N).float()).expand(n, -1, -1, -1)     # [B, C, 2, N]
+        rows = 1 + torch.arange(ROWS)
+        batch = torch.arange(n)[:, None, None, None]
         outs, log, exact = [], [], []
         for t in range(ticks):
             if callable(world) and t > 0:                 # the world rewrites its slots
-                now = world(t, mem[:, slots - n_out:]) if hands else world(t)
+                now = world(t, mem[:, out:scr]) if hands else world(t)
                 if now is None:
                     break
-                mem = torch.cat([mem[:, :1], now, mem[:, 1 + n_in:]], dim=1)
-            pc = F.layer_norm(mem[:, 0], (SLOT,))
-            sc, idx = (pc @ self.keys.T).topk(self.k, dim=-1)                 # fetch
-            mix = torch.softmax(sc, dim=-1)
-            got = torch.cat([torch.einsum("bps,bsd->bpd", at, mem).flatten(1), mem[:, 0]], dim=1)
-            # execute. Runs in a batch mostly fetch the same few vops, so each vop that
-            # anyone fetched is applied once to the whole batch (one plain matmul) and every
-            # run then takes its own k results.
-            uniq, inv = idx.unique(return_inverse=True)
-            every = (self.m[uniq].reshape(-1, fan_in) @ got.T).view(len(uniq), self.fan_out, n)
-            every = every.permute(2, 0, 1) + self.bias[uniq]                  # [B, U, fan_out]
-            out = every.gather(1, inv.unsqueeze(-1).expand(-1, -1, self.fan_out))
-            vec = torch.einsum("bk,bki->bi", mix, F.hardtanh(out[..., :2 * SLOT]))
-            want = torch.softmax(out[..., 2 * SLOT:].reshape(n, self.k, ptrs, self.steps), dim=-1)
-            step = torch.einsum("bk,bkps->bps", mix, want)                    # [B, P, steps]
-            if whole:
-                step = choose(step, learn)
-            mem = move(mem, vec[:, None, :SLOT], (at[:, -1] * can_write).unsqueeze(-1))   # store
-            mem = torch.cat([move(mem[:, :1], vec[:, None, SLOT:]), mem[:, 1:]], dim=1)
-            new = step[..., 0:1] * at
-            for j in range(self.moves):
-                new = new + step[..., 1 + j:2 + j] * torch.zeros_like(at).index_add(2, to[j], at)
-            at = new
-            outs.append(mem[:, slots - n_out:])
+                mem = torch.cat([mem[:, :inp], now, mem[:, out:]], dim=1)
+            pc = F.layer_norm(mem[:, 0:2 * C:2], (SLOT,))                    # [B, C, 16]
+            like = (pc @ mem.transpose(1, 2)).masked_fill(no_fetch, float("-inf"))
+            sc, j = like.topk(self.k, dim=-1)                                 # fetch
+            mix = torch.softmax(sc, dim=-1)                                   # [B, C, k]
+            blocks = mem[batch, j.unsqueeze(-1) + rows]                       # [B, C, k, 16, 16]
+            m = torch.einsum("bck,bckrd->bcrd", mix, blocks)
+            x = torch.einsum("bcn,bnd->bcd", at[:, :, 0], mem)                # load
+            y = F.hardtanh(torch.einsum("bcrd,bcd->bcr", m, x))               # execute
+            for c in range(C):                                                # store
+                mem = move(mem, y[:, c, None], (at[:, c, 1] * can_write).unsqueeze(-1))
+            step = mem[:, 1:2 * C:2, :2].clamp(-1, 1)                         # [B, C, 2]
+            if self.hard and not self.training:
+                step = step.round()
+            s = step.unsqueeze(-1)
+            at = ((1 - s.abs()) * at + s.clamp(min=0) * torch.zeros_like(at).index_add(3, fwd, at)
+                  + (-s).clamp(min=0) * torch.zeros_like(at).index_add(3, back, at))
+            outs.append(mem[:, out:scr])
             exact.append(at.max(dim=-1).values.mean().detach())
-            if not self.training:
-                self.picks += torch.bincount(idx[:, 0], minlength=self.ops).float()
             if trace:
-                log.append((idx[:, 0], at.detach(), step.detach()))
+                log.append((j[:, :, 0], at.detach(), step.detach()))
         self.trace, self.exact = log, torch.stack(exact).mean().item()
         return torch.stack(outs)
+
+    def name(self, i, n_in, n_out):
+        """A slot number as a name: pc0, ct0 (core 0's registers), i3, o2, s0, v5 (the label
+        of vop 5), v5.3 (the third row of its matrix)."""
+        inp, out, scr, vop, _ = self.layout(n_in, n_out)
+        if i < inp:
+            return ("pc%d" if i % 2 == 0 else "ct%d") % (i // 2)
+        if i < out:
+            return "i%d" % (i - inp)
+        if i < scr:
+            return "o%d" % (i - out)
+        if i < vop:
+            return "s%d" % (i - scr)
+        v, r = divmod(i - vop, 1 + ROWS)
+        return "v%d" % v if r == 0 else "v%d.%d" % (v, r)
 
     def sharp(self):
         """How exact the pointers were on the last run: the mean share of a pointer that is
