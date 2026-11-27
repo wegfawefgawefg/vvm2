@@ -9,6 +9,11 @@
   options after STEPS:  ops=8   the size of the bank       gru=0   skip the GRU
                         seed=1  another seed
                         hold=1  simon: ticks a light is lit (2 unless said)
+                        clock=1 simon: one more input slot, a clock the world steps every
+                                tick (a 4-bit counter that wraps at 16)
+                        lights=4 simon: train on 1 to 4 lights (6 unless said), test to 12
+                        seek=0  copy, reverse, simon: hold the moves by content off
+                        threads=8
 
 Lists: the world puts the list one item a slot in the input region and reads the answer
 from as many output slots. An item is one of 8 symbols, each a fixed vector of 16 numbers
@@ -39,6 +44,39 @@ from .core import SLOT, Core
 SYMBOLS = 8
 COLOURS = 4
 HOLD = 2
+CLOCK = False
+THREADS = 8
+LIGHTS = 6          # simon: the most lights in a trained sequence
+SEEK = True         # False: the moves by content are held off (no_seek)
+
+
+def clock_code(t):
+    """The clock device's slot at tick t: the four bits of t (it wraps at 16), each as plus
+    or minus 0.45 in one of the first four numbers."""
+    code = torch.zeros(SLOT)
+    code[:4] = torch.tensor([0.45 if (t >> j) & 1 else -0.45 for j in range(4)])
+    return code
+
+
+def no_seek(core):
+    """Hold the moves by content off, from outside the machine: for every pointer the
+    wish to seek (and to seek its twin) gets a bias of -20 and weights of zero in every vop,
+    and their gradients are zeroed so they stay there. The machine itself is unchanged; it
+    just never wants that move. A test of whether a task is being solved by a blurred seek."""
+    width = core.steps - (1 + core.moves + 6)           # 1, or 2 with the twin step
+    cols = [2 * SLOT + p * core.steps + core.steps - 1 - j
+            for p in range(core.reads + 1) for j in range(width)]
+
+    def hold(grad):
+        grad = grad.clone()
+        grad[:, cols] = 0
+        return grad
+
+    with torch.no_grad():
+        core.bias[:, cols] = -20.0
+        core.m[:, cols] = 0.0
+    core.bias.register_hook(hold)
+    core.m.register_hook(hold)
 
 
 def codebook(n, seed=7):
@@ -74,6 +112,8 @@ class TapeVM(nn.Module):
             else:
                 light = torch.zeros(n, SLOT)
                 signal = play.expand(n, -1)
+            if CLOCK:
+                return torch.stack([light, signal, clock_code(t).expand(n, -1)], dim=1)
             return torch.stack([light, signal], dim=1)
 
         outs = self.core(world, 2 * HOLD * length, 1, trace=trace)
@@ -202,7 +242,7 @@ class SimonGRU(nn.Module):
     def __init__(self, width):
         super().__init__()
         self.register_buffer("book", codebook(SYMBOLS + 2))
-        self.gru = nn.GRU(2 * SLOT, width, batch_first=True)
+        self.gru = nn.GRU((2 + CLOCK) * SLOT, width, batch_first=True)
         self.out = nn.Linear(width, COLOURS)
 
     def simon(self, colours):
@@ -211,7 +251,11 @@ class SimonGRU(nn.Module):
                            torch.zeros(n, HOLD * length, SLOT)], dim=1)
         signal = torch.cat([self.book[SYMBOLS].expand(n, HOLD * length, -1),
                             self.book[SYMBOLS + 1].expand(n, HOLD * length, -1)], dim=1)
-        y, _ = self.gru(torch.cat([light, signal], dim=2))
+        seen = [light, signal]
+        if CLOCK:
+            ticks = torch.stack([clock_code(t) for t in range(2 * HOLD * length)])
+            seen.append(ticks.expand(n, -1, -1))
+        y, _ = self.gru(torch.cat(seen, dim=2))
         read = [HOLD * length + HOLD * (i + 1) - 1 for i in range(length)]
         return self.out(y[:, read])
 
@@ -229,7 +273,7 @@ def show_trace(vm, task, x):
     with torch.no_grad():
         (vm.simon if task == "simon" else vm.lists)(x, trace=True)
     core, log = vm.core, vm.core.trace
-    n_in = 2 if task == "simon" else x.shape[1]
+    n_in = 2 + CLOCK if task == "simon" else x.shape[1]
 
     def name(i):
         if i == 0:
@@ -252,10 +296,13 @@ def show_trace(vm, task, x):
 
 
 def run(task, steps, ops=128, only_vvm=False, seed=0):
-    torch.set_num_threads(8)
+    torch.set_num_threads(THREADS)
     simon = task == "simon"
     kinds = COLOURS if simon else SYMBOLS
-    short, tests = ((1, 6), (6, 8, 12, 16)) if simon else ((2, 8), (8, 12, 16, 24, 48, 96))
+    short, tests = ((2, 8), (8, 12, 16, 24, 48, 96))
+    if simon:
+        short = (1, LIGHTS)
+        tests = (6, 8, 12, 16) if LIGHTS == 6 else (LIGHTS, LIGHTS * 3 // 2, 2 * LIGHTS, 3 * LIGHTS)
 
     def answer(model, x):
         logits = model.simon(x) if simon else model.lists(x)
@@ -263,12 +310,16 @@ def run(task, steps, ops=128, only_vvm=False, seed=0):
 
     torch.manual_seed(seed)
     vm = TapeVM(ops=ops, k=min(4, ops))
+    if not SEEK:
+        no_seek(vm.core)
     make = (lambda w: SimonGRU(w)) if simon else (lambda w: ListGRU(w))
     gru = make(sized(make, params(vm)))
     print("%s: trained on lengths %d to %d, %d steps, a bank of %d vops%s. In each cell: share "
           "of items right / share of whole sequences right" % (
               task, short[0], short[1], steps, ops,
-              ", %d tick%s a light" % (HOLD, "" if HOLD == 1 else "s") if simon else ""))
+              (", %d tick%s a light%s" % (HOLD, "" if HOLD == 1 else "s",
+                                          ", with a clock slot" if CLOCK else "") if simon else "")
+              + ("" if SEEK else ", moves by content held off")))
     print("| model | weights | " + " | ".join("length %d" % t for t in tests) + " |")
     print("|---|---|" + "---|" * len(tests), flush=True)
     for name, model in (("vvm", vm),) if only_vvm else (("vvm", vm), ("gru", gru)):
@@ -308,13 +359,17 @@ def run(task, steps, ops=128, only_vvm=False, seed=0):
                   flush=True)
             vm.core.hard = False
         if name == "vvm":
-            for length in ((4, 8) if simon else (8, 12)):
+            for length in (((4, 8) if HOLD < 3 else (3,)) if simon else (8, 12)):
                 show_trace(vm, task, torch.randint(kinds, (200, length), generator=g))
 
 
 if __name__ == "__main__":
     extra = dict(a.split("=") for a in sys.argv[3:])
     HOLD = int(extra.get("hold", HOLD))   # ticks each light is lit, and between button reads
+    CLOCK = extra.get("clock", "0") == "1"
+    THREADS = int(extra.get("threads", THREADS))
+    LIGHTS = int(extra.get("lights", LIGHTS))
+    SEEK = extra.get("seek", "1") == "1"
     if len(sys.argv) > 1 and sys.argv[1] == "lookup":
         run_lookup(int(sys.argv[2]) if len(sys.argv) > 2 else 4000,
                    ops=int(extra.get("ops", 128)), only_vvm=extra.get("gru", "1") == "0",
