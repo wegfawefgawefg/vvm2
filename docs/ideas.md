@@ -218,3 +218,9 @@ Nothing below has been shown beyond that.
     the two ways a pointer reaches a slot (owner): by position (a fixed mailbox each, a
     neighbour) and by content (post a message in the shared region; whoever seeks
     something like it finds it, so no machine has to know which other one does what).
+65. **A sheet of machines** (owner: "packed cortical columns on a sheet"): many copies of
+    the same small machine laid out on a grid, each with private memory, sharing slots
+    with its neighbours. If machines that exchange the most are kept next to each other
+    (sorted by what they deal with, as the bank was meant to be sorted on disk), reaching
+    by content turns into reaching a neighbour by position, which is the cheap kind.
+
