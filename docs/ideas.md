@@ -234,10 +234,9 @@ Nothing below has been shown beyond that.
     vops in the same memory and writable, the rule is itself a few vops whose job is to
     rewrite other vops. Related work to read first: synthetic gradients, learned
     optimizers, evolved Hebbian rules.
-68. **Predicting its own next state** (owner). Three different things under that name:
-    (a) predict what the world will write next, a signal at every tick with no labels;
-    (b) predict its own next memory, which collapses unless guarded (the easy way to be
-    predictable is to do nothing); (c) distil a routine: a new vop, keyed by the state a
-    loop starts in, trained to write in one tick what the loop takes many to reach, so a
-    slow routine becomes a fast one.
-
+68. **Predicting its own next state** (owner). One idea at three distances, each only a
+    training signal, with no new part in the machine: (a) predict what the world will write
+    next; (b) predict its own next memory (collapses unless guarded: the easy way to be
+    predictable is to do nothing); (c) its own state several ticks on is the target for
+    what it produces now, so it learns to get there in one tick (the owner: "distil to one
+    step feels like a core learning thing").
