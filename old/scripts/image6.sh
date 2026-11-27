@@ -6,4 +6,4 @@ cd "$(dirname "$0")/.."
 [ -x .venv/bin/python ] || scripts/setup.sh
 t="${1:-mnist}"
 [ -d "data/$t" ] || scripts/get_data.sh "$t"
-nice -n 19 .venv/bin/python -m vvm2.image "$@"
+nice -n 19 .venv/bin/python -m old.image6 "$@"

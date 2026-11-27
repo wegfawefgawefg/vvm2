@@ -1,6 +1,6 @@
 """The machine on images: MNIST, Kuzushiji-MNIST, Fashion-MNIST.
 
-  python -m vvm2.image [TASK STEPS]        default mnist 12000
+  python -m old.image6 [TASK STEPS]        default mnist 12000
 
 The world cuts the image into 49 patches of 4 by 4 pixels, one a slot, and reads the answer
 from the first 10 numbers of one output slot after the last tick. Four reads a tick, 8
@@ -11,8 +11,8 @@ import sys
 import torch
 import torch.nn as nn
 
-from .common import TASKS, mlp_matched, params, patches, score, train
-from .core import Core, grid_pos, rand_pos
+from vvm2.common import TASKS, mlp_matched, params, patches, score, train
+from .core6b import Core, grid_pos, rand_pos
 
 
 class ImageVM(nn.Module):

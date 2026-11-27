@@ -1,6 +1,6 @@
 """Does the copy loop lose its place as it goes? A check of one claim.
 
-  python -m vvm2.drift [STEPS]
+  python -m old.drift6 [STEPS]
 
 Trains the copy machine with lists starting anywhere (as scripts/tape.sh copy 3000 shift=16)
 and then runs it on lists of 8, 12, 16 and 24. For each stretch of four places it reports:
@@ -22,7 +22,7 @@ import sys
 import torch
 import torch.nn.functional as F
 
-from .tape import SYMBOLS, TapeVM
+from .tape6 import SYMBOLS, TapeVM
 
 
 def main():
