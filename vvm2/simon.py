@@ -1,6 +1,6 @@
 """The lights game (Simon) around the core.
 
-    python -m vvm2.simon [STEPS] [hold=1 lag=1 max=6 colours=4 scratch=64 ops=128 seed=0
+    python -m vvm2.simon [STEPS] [hold=1 lag=1 max=6 colours=4 scratch=64 ops=32 seed=0
                                   gru=1 threads=1 mix=0 loop=0
                                   before=0 grow=0 draw=0 one=0]
 
@@ -155,7 +155,7 @@ def score(model, tests, g, colours):
     return " | ".join(cells)
 
 
-def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=128, seed=0, gru=True,
+def run(steps=8000, hold=1, lag=1, most=6, colours=4, scratch=64, ops=32, seed=0, gru=True,
         threads=1, mix=False, loop=False, before=0, grow=False, draw=False, one=False):
     torch.set_num_threads(threads)
     torch.manual_seed(seed)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     first = [s for s in sys.argv[1:] if "=" not in s]
     run(steps=int(first[0]) if first else 8000, hold=int(a.get("hold", 1)),
         lag=int(a.get("lag", 1)), most=int(a.get("max", 6)), colours=int(a.get("colours", 4)),
-        scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 128)), seed=int(a.get("seed", 0)),
+        scratch=int(a.get("scratch", 64)), ops=int(a.get("ops", 32)), seed=int(a.get("seed", 0)),
         gru=a.get("gru", "1") == "1", threads=int(a.get("threads", 1)), mix=a.get("mix", "0") == "1", loop=a.get("loop", "0") == "1",
         before=int(a.get("before", 0)), grow=a.get("grow", "0") == "1",
         draw=a.get("draw", "0") == "1", one=a.get("one", "0") == "1")

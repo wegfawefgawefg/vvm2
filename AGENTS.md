@@ -31,6 +31,11 @@ steps (`go`), the number of output slots and the ticks, and reads the output slo
 not change it: write down what is missing and why, as a finding. Always report the machine
 "run with whole steps" (`core.hard = True`) beside the trained run, and show a trace.
 
+## Standard sizes
+
+A bank of 32 vops unless a run is about bank size (the owner's standard, 2026-11-27). Say
+the bank size in every table.
+
 ## Layout and style
 
 - `vvm2/`: the Python package (model, baselines, tasks, harness). `scripts/`: one shell

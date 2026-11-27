@@ -76,7 +76,7 @@ def choose(p, draw, through):
 
 
 class Core(nn.Module):
-    def __init__(self, scratch=32, ops=128, k=4, reads=2, seek_self=False, moves=2):
+    def __init__(self, scratch=32, ops=32, k=4, reads=2, seek_self=False, moves=2):
         super().__init__()
         self.scratch, self.ops, self.k, self.reads = scratch, ops, k, reads
         self.moves = moves
